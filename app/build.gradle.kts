@@ -26,8 +26,8 @@ android {
         applicationId = "com.weathermixer.sixq"
         minSdk = 24
         targetSdk = 37
-        versionCode = 87
-        versionName = "1.2.30"
+        versionCode = 88
+        versionName = "1.2.31"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField(

@@ -44,4 +44,27 @@ class WeatherRepositoryTest {
         assertTrue(ThemeMode.Dark.resolvesToDarkTheme(systemDarkTheme = false))
         assertTrue(ThemeMode.System.resolvesToDarkTheme(systemDarkTheme = true))
     }
+
+    @Test
+    fun builtInNoKeyWeatherSourcesAreNotAutoDisabledByApiFailures() {
+        val configs = ApiConfigDefaults.defaultConfigs()
+        val xiaomi = configs.first { it.sourceId == SourceId.XiaomiWeather }
+        val msn = configs.first { it.sourceId == SourceId.MsnWeather }
+        val amap = configs.first { it.sourceId == SourceId.Amap }
+
+        assertFalse(shouldAutoDisableApiSource(xiaomi))
+        assertFalse(shouldAutoDisableApiSource(msn))
+        assertTrue(shouldAutoDisableApiSource(amap))
+    }
+
+    @Test
+    fun baiduIpLocationWithoutReadyConfigFallsBackToDeviceMethod() {
+        val configs = ApiConfigDefaults.defaultConfigs().map { config ->
+            if (config.sourceId == SourceId.BaiduIpLocation) config.copy(apiKey = "") else config
+        }
+
+        assertTrue(configs.first { it.sourceId == SourceId.BaiduIpLocation }.requiresKey)
+        assertFalse(configs.first { it.sourceId == SourceId.BaiduIpLocation }.isReady)
+        assertTrue(normalizeLocationMethodForConfigs(LocationMethod.BaiduIp, configs) == LocationMethod.Device)
+    }
 }

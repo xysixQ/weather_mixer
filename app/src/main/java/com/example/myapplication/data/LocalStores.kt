@@ -487,7 +487,7 @@ internal object ProfileStore {
 internal object ApiConfigStore {
     private const val PrefName = "weather_api_config"
     private const val SchemaVersionKey = "config_schema_version"
-    private const val CurrentSchemaVersion = 7
+    private const val CurrentSchemaVersion = 8
     private const val EndpointSuffix = "_endpoint"
     private const val KeySuffix = "_key"
     private const val UserAgentSuffix = "_user_agent"
@@ -497,9 +497,14 @@ internal object ApiConfigStore {
     fun load(context: Context): List<WeatherApiConfig> {
         val prefs = context.getSharedPreferences(PrefName, Context.MODE_PRIVATE)
         val schemaVersion = prefs.getInt(SchemaVersionKey, 1)
+        val savedFailureStatus = ApiFailureStatusStore.load(context)
         val recoverSeniverse = schemaVersion < 4 &&
-            ApiFailureStatusStore.load(context)?.let { status ->
+            savedFailureStatus?.let { status ->
                 status.contains("心知天气已停用") && status.contains("403")
+            } == true
+        val recoverBuiltInNoKeyWeather = schemaVersion < 8 &&
+            savedFailureStatus?.let { status ->
+                status.contains("小米天气已停用") || status.contains("MSN 天气已停用")
             } == true
         val configs = ApiConfigDefaults.defaultConfigs().map { default ->
             val prefix = default.sourceId.name
@@ -539,6 +544,7 @@ internal object ApiConfigStore {
                 enabled = when {
                     schemaVersion < 5 && default.sourceId == SourceId.Meteostat -> true
                     recoverSeniverse && default.sourceId == SourceId.Seniverse -> true
+                    schemaVersion < 8 && default.sourceId in setOf(SourceId.XiaomiWeather, SourceId.MsnWeather) -> true
                     else -> prefs.getBoolean(prefix + EnabledSuffix, default.enabled)
                 },
                 apiHost = migratedHost,
@@ -546,7 +552,7 @@ internal object ApiConfigStore {
         }
         if (schemaVersion < CurrentSchemaVersion) {
             save(context, configs)
-            if (recoverSeniverse) ApiFailureStatusStore.clear(context)
+            if (recoverSeniverse || recoverBuiltInNoKeyWeather) ApiFailureStatusStore.clear(context)
         }
         return configs
     }

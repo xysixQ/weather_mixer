@@ -654,6 +654,18 @@ internal fun apiFailureStatusForRegion(status: String?, region: District): Strin
         .takeIf(String::isNotBlank)
 }
 
+internal fun shouldAutoDisableApiSource(config: WeatherApiConfig): Boolean =
+    config.requiresKey || !config.hasBuiltInDefault
+
+internal fun normalizeLocationMethodForConfigs(
+    method: LocationMethod,
+    configs: List<WeatherApiConfig>,
+): LocationMethod {
+    if (method != LocationMethod.BaiduIp) return method
+    val baiduConfig = configs.firstOrNull { it.sourceId == SourceId.BaiduIpLocation }
+    return if (baiduConfig?.isReady == true) method else LocationMethod.Device
+}
+
 @Composable
 internal fun DetailCardAnchor(
     detail: DashboardDetail,
@@ -738,6 +750,7 @@ internal fun WeatherAdvisorApp(
     var themeRevealRunId by remember { mutableIntStateOf(0) }
     var refreshRequest by remember { mutableStateOf(0) }
     var previousHapticPage by remember { mutableStateOf(currentPage) }
+    var startupLocationRequest by remember { mutableIntStateOf(0) }
     val startupPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
     ) { result ->
@@ -746,6 +759,10 @@ internal fun WeatherAdvisorApp(
         if (granted) {
             locationMethod = LocationMethod.Device
             LocationMethodStore.save(context, LocationMethod.Device)
+            startupLocationRequest += 1
+        } else {
+            initialLocationPending = false
+            locationMessage = "请授权系统定位，或搜索城市选择。"
         }
     }
     var snapshot by remember {
@@ -788,6 +805,14 @@ internal fun WeatherAdvisorApp(
         while (true) {
             sceneTimeMillis = System.currentTimeMillis()
             delay(60_000L)
+        }
+    }
+
+    LaunchedEffect(apiConfigs, locationMethod) {
+        val normalizedMethod = normalizeLocationMethodForConfigs(locationMethod, apiConfigs)
+        if (normalizedMethod != locationMethod) {
+            locationMethod = normalizedMethod
+            LocationMethodStore.save(context, normalizedMethod)
         }
     }
 
@@ -846,7 +871,7 @@ internal fun WeatherAdvisorApp(
         }
     }
 
-    LaunchedEffect(restoredRegion) {
+    LaunchedEffect(restoredRegion, startupLocationRequest) {
         if (restoredRegion != null) return@LaunchedEffect
         if (!hasLocationPermission(context)) {
             startupPermissionLauncher.launch(
@@ -855,28 +880,29 @@ internal fun WeatherAdvisorApp(
                     Manifest.permission.ACCESS_COARSE_LOCATION,
                 )
             )
-        } else {
-            locationMethod = LocationMethod.Device
-            LocationMethodStore.save(context, LocationMethod.Device)
+            locationMessage = "请授权系统定位，或搜索城市选择。"
+            initialLocationPending = false
+            return@LaunchedEffect
         }
-        locationMessage = "正在通过百度 IP 识别城市..."
+        locationMethod = LocationMethod.Device
+        LocationMethodStore.save(context, LocationMethod.Device)
+        locationMessage = "正在通过系统定位识别城市..."
         val result = repository.locateCurrentPosition(
             context = context,
             apiConfigs = apiConfigs,
-            method = LocationMethod.BaiduIp,
+            method = LocationMethod.Device,
         )
         val resolvedRegion = result.position?.region
         if (resolvedRegion != null) {
             selectAndPersistRegion(resolvedRegion)
             citySearchResults = listOf(resolvedRegion)
-            citySearchMessage = "IP 定位识别到 ${resolvedRegion.displayName}。"
-            locationMessage = "百度 IP 已定位，并由小米识别为 ${resolvedRegion.displayName}。"
+            citySearchMessage = "系统定位识别到 ${resolvedRegion.displayName}。"
+            locationMessage = "系统定位已由小米识别为 ${resolvedRegion.displayName}。"
         } else {
-            locationMessage = result.failureMessage.ifBlank { "IP 定位失败，请搜索并选择城市。" }
+            locationMessage = result.failureMessage.ifBlank { "系统定位失败，请搜索并选择城市。" }
         }
         initialLocationPending = false
     }
-
     fun parentPage(page: AppPage): AppPage = when (page) {
             AppPage.Profile -> AppPage.Settings
             AppPage.Sources -> AppPage.Settings
@@ -1117,16 +1143,32 @@ internal fun WeatherAdvisorApp(
             weatherCache[selectedRegion.storageKey] = cacheEntry
             withContext(Dispatchers.IO) { WeatherRefreshStore.save(context, cacheEntry) }
             if (detectedFailures.isNotEmpty()) {
-                val failedIds = detectedFailures.map(ApiSourceFailure::sourceId).toSet()
-                val updatedConfigs = apiConfigs.map { config ->
-                    if (config.sourceId in failedIds) config.copy(enabled = false) else config
+                val configById = apiConfigs.associateBy(WeatherApiConfig::sourceId)
+                val autoDisabledFailures = detectedFailures.filter { failure ->
+                    configById[failure.sourceId]?.let(::shouldAutoDisableApiSource) == true
                 }
-                disabledApiStatus = detectedFailures.joinToString(" · ") { failure ->
+                val autoDisabledIds = autoDisabledFailures.map(ApiSourceFailure::sourceId).toSet()
+                val transientFailures = detectedFailures.filterNot { failure ->
+                    failure.sourceId in autoDisabledIds
+                }
+                val statusParts = autoDisabledFailures.map { failure ->
                     "${failure.displayName}已停用（${failure.reason}）"
+                } + transientFailures.map { failure ->
+                    "${failure.displayName}暂不可用（${failure.reason}）"
                 }
+                disabledApiStatus = statusParts.joinToString(" · ").takeIf(String::isNotBlank)
                 ApiFailureStatusStore.save(context, disabledApiStatus)
-                ApiConfigStore.save(context, updatedConfigs)
-                apiConfigs = updatedConfigs
+                if (autoDisabledFailures.isNotEmpty()) {
+                    val failedIds = autoDisabledFailures.map(ApiSourceFailure::sourceId).toSet()
+                    val updatedConfigs = apiConfigs.map { config ->
+                        if (config.sourceId in failedIds) config.copy(enabled = false) else config
+                    }
+                    ApiConfigStore.save(context, updatedConfigs)
+                    apiConfigs = updatedConfigs
+                }
+            } else if (disabledApiStatus != null) {
+                disabledApiStatus = null
+                ApiFailureStatusStore.clear(context)
             }
         } finally {
             weatherStore.accept(WeatherContract.Intent.SetRefreshing(false))
@@ -1222,10 +1264,15 @@ internal fun WeatherAdvisorApp(
                 onUseCurrentLocation = {
                     scope.launch {
                         locationMessage = "正在请求当前位置..."
+                        val effectiveMethod = normalizeLocationMethodForConfigs(locationMethod, apiConfigs)
+                        if (effectiveMethod != locationMethod) {
+                            locationMethod = effectiveMethod
+                            LocationMethodStore.save(context, effectiveMethod)
+                        }
                         val result = repository.locateCurrentPosition(
                             context = context,
                             apiConfigs = apiConfigs,
-                            method = locationMethod,
+                            method = effectiveMethod,
                         )
                         val position = result.position
                         if (position == null) {
