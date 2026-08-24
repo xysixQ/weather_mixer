@@ -487,7 +487,7 @@ internal object ProfileStore {
 internal object ApiConfigStore {
     private const val PrefName = "weather_api_config"
     private const val SchemaVersionKey = "config_schema_version"
-    private const val CurrentSchemaVersion = 6
+    private const val CurrentSchemaVersion = 7
     private const val EndpointSuffix = "_endpoint"
     private const val KeySuffix = "_key"
     private const val UserAgentSuffix = "_user_agent"
@@ -505,12 +505,20 @@ internal object ApiConfigStore {
             val prefix = default.sourceId.name
             val savedEndpoint = prefs.getString(prefix + EndpointSuffix, default.endpoint) ?: default.endpoint
             val legacyOpenMeteoEndpoint = "https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,weather_code,wind_speed_10m&hourly=precipitation_probability,uv_index&timezone=auto"
+            val legacyXiaomiEndpoint = "https://weatherapi.market.xiaomi.com/wtr-v3/weather/all?latitude={lat}&longitude={lon}&isLocated=false&locationKey=weathercn:{locationKey}&days=15&appKey={key}&sign={sign}&isGlobal=false&locale=zh_CN"
+            val legacyMsnEndpoint = "https://api.msn.com/weather/overview?locale=zh-cn&lat={lat}&lon={lon}&appId=9e21380c-ff19-4c78-b4ea-19558e93a5d3&apiKey={key}&ocid=msftweather&wrapOData=false&units=C&pastPeriods=1&days=10&hours=24"
             val endpoint = when {
                 default.sourceId == SourceId.QWeather &&
                     savedEndpoint.contains("devapi.qweather.com", ignoreCase = true) -> default.endpoint
                 schemaVersion < CurrentSchemaVersion &&
                     default.sourceId == SourceId.OpenMeteo &&
                     savedEndpoint == legacyOpenMeteoEndpoint -> default.endpoint
+                schemaVersion < CurrentSchemaVersion &&
+                    default.sourceId == SourceId.XiaomiWeather &&
+                    savedEndpoint == legacyXiaomiEndpoint -> default.endpoint
+                schemaVersion < CurrentSchemaVersion &&
+                    default.sourceId == SourceId.MsnWeather &&
+                    savedEndpoint == legacyMsnEndpoint -> default.endpoint
                 else -> savedEndpoint
             }
             val savedHost = prefs.getString(prefix + ApiHostSuffix, default.apiHost).orEmpty()
@@ -522,7 +530,11 @@ internal object ApiConfigStore {
             }
             default.copy(
                 endpoint = endpoint,
-                apiKey = prefs.getString(prefix + KeySuffix, default.apiKey) ?: default.apiKey,
+                apiKey = if (schemaVersion < CurrentSchemaVersion && default.sourceId in setOf(SourceId.XiaomiWeather, SourceId.MsnWeather)) {
+                    default.apiKey
+                } else {
+                    prefs.getString(prefix + KeySuffix, default.apiKey) ?: default.apiKey
+                },
                 userAgent = prefs.getString(prefix + UserAgentSuffix, default.userAgent) ?: default.userAgent,
                 enabled = when {
                     schemaVersion < 5 && default.sourceId == SourceId.Meteostat -> true

@@ -62,6 +62,12 @@ internal enum class ThemeMode(val label: String) {
     System("跟随系统"),
 }
 
+internal fun ThemeMode.resolvesToDarkTheme(systemDarkTheme: Boolean): Boolean = when (this) {
+    ThemeMode.Light -> false
+    ThemeMode.Dark -> true
+    ThemeMode.System -> systemDarkTheme
+}
+
 internal val LocalAppDarkTheme = staticCompositionLocalOf { false }
 
 internal val BreezyUvShape = GenericShape { size, _ ->
@@ -107,11 +113,7 @@ internal fun WeatherFusionTheme(
 ) {
     val context = LocalContext.current
     val systemDarkTheme = isSystemInDarkTheme()
-    val darkTheme = when (themeMode) {
-        ThemeMode.Light -> false
-        ThemeMode.Dark -> true
-        ThemeMode.System -> systemDarkTheme
-    }
+    val darkTheme = themeMode.resolvesToDarkTheme(systemDarkTheme)
     val colorScheme = when {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && darkTheme -> dynamicDarkColorScheme(context)
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> dynamicLightColorScheme(context)

@@ -334,7 +334,18 @@ internal enum class AppVibration {
     RainPourPulse,
 }
 
-internal fun Context.performAppVibration(pattern: AppVibration, repetitionCount: Int = 1) {
+internal fun Context.performAppVibration(
+    pattern: AppVibration,
+    repetitionCount: Int = 1,
+    view: View? = null,
+) {
+    val platformFeedback = when (pattern) {
+        AppVibration.StrongImpact -> HapticFeedbackConstants.LONG_PRESS
+        AppVibration.ReorderBuzz -> HapticFeedbackConstants.CLOCK_TICK
+        AppVibration.RainPourPulse -> null
+    }
+    if (platformFeedback != null && view?.performHapticFeedback(platformFeedback) == true) return
+
     val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         getSystemService(VibratorManager::class.java)?.defaultVibrator
     } else {
@@ -787,6 +798,7 @@ internal fun WeatherAdvisorApp(
         previousHapticPage = currentPage
     }
 
+    val systemDarkTheme = isSystemInDarkTheme()
     val currentThemeBackground = MaterialTheme.colorScheme.background
     SideEffect {
         if (!themeRevealActive && themeRevealProgress >= 1f) {
@@ -806,7 +818,9 @@ internal fun WeatherAdvisorApp(
     }
 
     fun changeThemeModeWithReveal(mode: ThemeMode) {
-        if (mode != themeMode) {
+        val currentDarkTheme = themeMode.resolvesToDarkTheme(systemDarkTheme)
+        val nextDarkTheme = mode.resolvesToDarkTheme(systemDarkTheme)
+        if (mode != themeMode && currentDarkTheme != nextDarkTheme) {
             themeRevealOldBackground = currentThemeBackground
             themeRevealProgress = 0f
             themeRevealActive = true
@@ -814,7 +828,6 @@ internal fun WeatherAdvisorApp(
         }
         onThemeModeChanged(mode)
     }
-
     fun selectAndPersistRegion(region: District) {
         selectedRegion = region
         RegionStore.save(context, region)

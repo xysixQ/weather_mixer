@@ -26,8 +26,8 @@ android {
         applicationId = "com.weathermixer.sixq"
         minSdk = 24
         targetSdk = 37
-        versionCode = 84
-        versionName = "1.2.27"
+        versionCode = 86
+        versionName = "1.2.29"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField(
@@ -39,16 +39,6 @@ android {
             "String",
             "BAIDU_IP_LOCATION_API_KEY",
             localConfig("baiduIpLocationApiKey").toBuildConfigString()
-        )
-        buildConfigField(
-            "String",
-            "XIAOMI_WEATHER_APP_KEY",
-            localConfig("xiaomiWeatherAppKey").toBuildConfigString()
-        )
-        buildConfigField(
-            "String",
-            "XIAOMI_WEATHER_SIGN",
-            localConfig("xiaomiWeatherSign").toBuildConfigString()
         )
         buildConfigField(
             "String",
@@ -69,11 +59,6 @@ android {
             "String",
             "SENIVERSE_API_KEY",
             localConfig("seniverseApiKey").toBuildConfigString()
-        )
-        buildConfigField(
-            "String",
-            "MSN_WEATHER_API_KEY",
-            localConfig("msnWeatherApiKey").toBuildConfigString()
         )
         buildConfigField(
             "String",

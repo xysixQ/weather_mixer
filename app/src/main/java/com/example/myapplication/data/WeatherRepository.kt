@@ -408,6 +408,14 @@ internal class WeatherRepository {
         vehicleRestriction: VehicleRestriction? = null,
     ): WeatherSnapshot {
         val fusion = WeatherFusionEngine.fuse(region, readings)
+        val nowMillis = System.currentTimeMillis()
+        val fusedDaily = WeatherFusionEngine.fuseDaily(region, readings)
+        val fusedHourly = if (region.countryCode == "US") {
+            readings.firstOrNull { it.source.id == SourceId.Nws && it.hourlyForecast.isNotEmpty() }?.hourlyForecast
+                ?: readings.firstOrNull { it.hourlyForecast.isNotEmpty() }?.hourlyForecast.orEmpty()
+        } else {
+            readings.firstOrNull { it.hourlyForecast.isNotEmpty() }?.hourlyForecast.orEmpty()
+        }
         val advice = buildAdvice(region, profile, fusion.weather, vehicleRestriction)
         return WeatherSnapshot(
             region = region,
@@ -417,16 +425,57 @@ internal class WeatherRepository {
             sourceWeights = fusion.sourceWeights,
             fusionSummary = fusion.summary,
             anomalyNotes = fusion.anomalyNotes,
-            dailyForecast = WeatherFusionEngine.fuseDaily(region, readings),
-            hourlyForecast = if (region.countryCode == "US") {
-                readings.firstOrNull { it.source.id == SourceId.Nws && it.hourlyForecast.isNotEmpty() }?.hourlyForecast
-                    ?: readings.firstOrNull { it.hourlyForecast.isNotEmpty() }?.hourlyForecast.orEmpty()
-            } else {
-                readings.firstOrNull { it.hourlyForecast.isNotEmpty() }?.hourlyForecast.orEmpty()
-            },
+            dailyForecast = fusedDaily.ifEmpty { fallbackDailyForecast(fusion.weather, nowMillis) },
+            hourlyForecast = fusedHourly.ifEmpty { fallbackHourlyForecast(fusion.weather, nowMillis) },
             astronomy = mergeAstronomy(readings),
-            updatedAtMillis = System.currentTimeMillis(),
+            updatedAtMillis = nowMillis,
         )
+    }
+
+    private fun fallbackDailyForecast(weather: FusedWeather, nowMillis: Long): List<DailyForecast> {
+        val baseTemperature = weather.temperatureC
+        return List(7) { index ->
+            val trend = sin(index / 6.0 * Math.PI) * 1.4
+            val high = max(baseTemperature, baseTemperature + 2.0 + trend)
+            val low = min(baseTemperature, baseTemperature - 2.4 + trend * 0.55)
+            DailyForecast(
+                timeMillis = nowMillis + TimeUnit.DAYS.toMillis(index.toLong()),
+                highC = high,
+                lowC = low,
+                condition = fallbackForecastCondition(weather, index),
+                rainProbability = weather.rainProbability.coerceIn(0.0, 100.0),
+                aqi = weather.aqi,
+                windKph = weather.windKph.coerceAtLeast(0.0),
+                sunrise = null,
+                sunset = null,
+            )
+        }
+    }
+
+    private fun fallbackHourlyForecast(weather: FusedWeather, nowMillis: Long): List<HourlyForecast> {
+        val hourMillis = TimeUnit.HOURS.toMillis(1)
+        val firstHour = nowMillis - (nowMillis % hourMillis) + hourMillis
+        return List(36) { index ->
+            val hourAngle = index / 24.0 * Math.PI * 2.0 - Math.PI / 2.0
+            HourlyForecast(
+                timeMillis = firstHour + hourMillis * index,
+                temperatureC = weather.temperatureC + sin(hourAngle) * 1.8,
+                condition = fallbackForecastCondition(weather, index),
+                rainProbability = weather.rainProbability.coerceIn(0.0, 100.0),
+                aqi = weather.aqi,
+                windKph = weather.windKph.coerceAtLeast(0.0),
+                windDirection = null,
+            )
+        }
+    }
+
+    private fun fallbackForecastCondition(weather: FusedWeather, index: Int): WeatherCondition {
+        val shortTermRain = index <= 3 && (weather.rainNextHourMm > 0.05 || weather.rainProbability >= 55.0)
+        return if (shortTermRain) {
+            rainConditionForHourlyMm(weather.rainNextHourMm) ?: weather.condition.takeIf { it.isRainLike } ?: WeatherCondition.Rain
+        } else {
+            weather.condition
+        }
     }
 
     private fun buildAdvice(
@@ -713,7 +762,7 @@ internal class WeatherRepository {
     ): WeatherReading? {
         if (!region.isDomestic) return null
         val config = apiConfigs.firstOrNull { it.sourceId == SourceId.XiaomiWeather } ?: return null
-        if (!config.isReady || BuildConfig.XIAOMI_WEATHER_SIGN.isBlank()) return null
+        if (!config.isReady) return null
 
         val resolvedRegion = if (region.locationKey.isBlank()) {
             resolveXiaomiCityByCoordinates(
@@ -736,8 +785,6 @@ internal class WeatherRepository {
             .replace("{lng}", longitudeText)
             .replace("{longitude}", longitudeText)
             .replace("{locationKey}", encodeUrlParameter(locationKey))
-            .replace("{key}", encodeUrlParameter(config.apiKey.trim()))
-            .replace("{sign}", encodeUrlParameter(BuildConfig.XIAOMI_WEATHER_SIGN.trim()))
             .replace("{locale}", "zh_CN")
 
         val body = requestBody(config, requestUrl) ?: return null
@@ -754,7 +801,6 @@ internal class WeatherRepository {
         val config = apiConfigs.firstOrNull { it.sourceId == SourceId.MsnWeather } ?: return null
         if (!config.isReady) return null
         val requestUrl = fillCoordinateTemplate(config.endpoint, region)
-            .replace("{key}", encodeUrlParameter(config.apiKey.trim()))
         val body = requestBody(config, requestUrl) ?: return null
         return runCatching { parseMsnWeather(body) }.getOrNull()
     }

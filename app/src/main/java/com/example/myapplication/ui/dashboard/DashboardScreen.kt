@@ -407,6 +407,7 @@ internal fun DashboardScreen(
     val listState = rememberLazyListState()
     val reorderScope = rememberCoroutineScope()
     val latestOnBlockOrderChanged by rememberUpdatedState(onBlockOrderChanged)
+    val latestHapticFeedbackEnabled by rememberUpdatedState(hapticFeedbackEnabled)
     var homeDraftOrder by remember { mutableStateOf(blockOrder) }
     val latestHomeDraftOrder by rememberUpdatedState(homeDraftOrder)
     var homeDraggedBlock by remember { mutableStateOf<DashboardBlock?>(null) }
@@ -673,10 +674,10 @@ internal fun DashboardScreen(
             }
         }
         if (!crossedTargetCenter) return
-        if (hapticFeedbackEnabled) {
+        if (latestHapticFeedbackEnabled) {
             homeReorderHapticJob?.cancel()
             homeReorderHapticJob = reorderScope.launch {
-                context.performAppVibration(AppVibration.ReorderBuzz)
+                context.performAppVibration(AppVibration.ReorderBuzz, view = view)
             }
         }
         homeDraftOrder = moveDashboardBlock(latestHomeDraftOrder, currentIndex, targetIndex)
@@ -710,7 +711,7 @@ internal fun DashboardScreen(
         return pointerInput(block) {
             detectDragGesturesAfterLongPress(
                 onDragStart = { touchOffset ->
-                    if (hapticFeedbackEnabled) context.performAppVibration(AppVibration.StrongImpact)
+                    if (latestHapticFeedbackEnabled) context.performAppVibration(AppVibration.StrongImpact, view = view)
                     suppressDetailUntilMillis = SystemClock.uptimeMillis() + 1_000L
                     block.metricDetail?.let { editingMetric = it }
                     val bounds = homeModuleBounds[block] ?: Rect.Zero
