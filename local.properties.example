@@ -1,0 +1,17 @@
+# Copy this file to local.properties and fill values locally.
+# local.properties is ignored by Git and must not be committed.
+
+sdk.dir=
+
+aiAdviceApiKey=
+baiduIpLocationApiKey=
+xiaomiWeatherAppKey=
+xiaomiWeatherSign=
+amapApiKey=
+qWeatherApiKey=
+qWeatherApiHost=
+seniverseApiKey=
+msnWeatherApiKey=
+openWeatherApiKey=
+visualCrossingApiKey=
+meteostatRapidApiKey=

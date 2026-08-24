@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">天气融合助手</string>
+    <string name="hello_world">Hello World</string>
+    <string name="hello_subtitle">Welcome to your first Android screen.</string>
+</resources>
