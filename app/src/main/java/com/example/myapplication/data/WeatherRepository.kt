@@ -778,6 +778,7 @@ internal class WeatherRepository {
 
         val latitudeText = formatCoordinate(resolvedRegion.latitude)
         val longitudeText = formatCoordinate(resolvedRegion.longitude)
+        val xiaomiAppKey = config.apiKey.trim().ifBlank { XiaomiWeatherAppKey }
         val requestUrl = config.endpoint
             .replace("{lat}", latitudeText)
             .replace("{latitude}", latitudeText)
@@ -785,7 +786,10 @@ internal class WeatherRepository {
             .replace("{lng}", longitudeText)
             .replace("{longitude}", longitudeText)
             .replace("{locationKey}", encodeUrlParameter(locationKey))
-            .replace("{locale}", "zh_CN")
+            .replace("{key}", encodeUrlParameter(xiaomiAppKey))
+            .replace("{appKey}", encodeUrlParameter(xiaomiAppKey))
+            .replace("{sign}", encodeUrlParameter(XiaomiWeatherSign))
+            .replace("{locale}", "zh_cn")
 
         val body = requestBody(config, requestUrl) ?: return null
 
@@ -800,7 +804,10 @@ internal class WeatherRepository {
     ): WeatherReading? {
         val config = apiConfigs.firstOrNull { it.sourceId == SourceId.MsnWeather } ?: return null
         if (!config.isReady) return null
+        val msnApiKey = config.apiKey.trim().ifBlank { MsnWeatherApiKey }
         val requestUrl = fillCoordinateTemplate(config.endpoint, region)
+            .replace("{key}", encodeUrlParameter(msnApiKey))
+            .replace("{apiKey}", encodeUrlParameter(msnApiKey))
         val body = requestBody(config, requestUrl) ?: return null
         return runCatching { parseMsnWeather(body) }.getOrNull()
     }

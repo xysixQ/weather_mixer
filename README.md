@@ -39,7 +39,7 @@ aiAdviceApiKey=
 aiAdviceEndpoint=
 ```
 
-小米天气和 MSN 天气当前使用免 Key 默认入口，不需要在本地配置 Key。
+小米天气和 MSN 天气使用内置默认 endpoint 参数，不需要用户在本地配置或设置页填写 Key；设置页会隐藏这些内置参数。
 
 ## 构建与验证
 

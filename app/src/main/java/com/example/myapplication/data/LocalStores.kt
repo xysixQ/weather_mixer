@@ -487,7 +487,7 @@ internal object ProfileStore {
 internal object ApiConfigStore {
     private const val PrefName = "weather_api_config"
     private const val SchemaVersionKey = "config_schema_version"
-    private const val CurrentSchemaVersion = 8
+    private const val CurrentSchemaVersion = 9
     private const val EndpointSuffix = "_endpoint"
     private const val KeySuffix = "_key"
     private const val UserAgentSuffix = "_user_agent"
@@ -506,12 +506,19 @@ internal object ApiConfigStore {
             savedFailureStatus?.let { status ->
                 status.contains("小米天气已停用") || status.contains("MSN 天气已停用")
             } == true
+        val clearBuiltInWeatherEndpointFailure = schemaVersion < 9 &&
+            savedFailureStatus?.let { status ->
+                (status.contains("小米天气暂不可用") && status.contains("400")) ||
+                    (status.contains("MSN 天气暂不可用") && status.contains("401"))
+            } == true
         val configs = ApiConfigDefaults.defaultConfigs().map { default ->
             val prefix = default.sourceId.name
             val savedEndpoint = prefs.getString(prefix + EndpointSuffix, default.endpoint) ?: default.endpoint
             val legacyOpenMeteoEndpoint = "https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,weather_code,wind_speed_10m&hourly=precipitation_probability,uv_index&timezone=auto"
-            val legacyXiaomiEndpoint = "https://weatherapi.market.xiaomi.com/wtr-v3/weather/all?latitude={lat}&longitude={lon}&isLocated=false&locationKey=weathercn:{locationKey}&days=15&appKey={key}&sign={sign}&isGlobal=false&locale=zh_CN"
-            val legacyMsnEndpoint = "https://api.msn.com/weather/overview?locale=zh-cn&lat={lat}&lon={lon}&appId=9e21380c-ff19-4c78-b4ea-19558e93a5d3&apiKey={key}&ocid=msftweather&wrapOData=false&units=C&pastPeriods=1&days=10&hours=24"
+            val legacyXiaomiCredentialEndpoint = "https://weatherapi.market.xiaomi.com/wtr-v3/weather/all?latitude={lat}&longitude={lon}&isLocated=false&locationKey=weathercn:{locationKey}&days=15&appKey={key}&sign={sign}&isGlobal=false&locale=zh_CN"
+            val legacyXiaomiNoCredentialEndpoint = "https://weatherapi.market.xiaomi.com/wtr-v3/weather/all?latitude={lat}&longitude={lon}&isLocated=false&locationKey=weathercn:{locationKey}&days=15&isGlobal=false&locale=zh_CN"
+            val legacyMsnCredentialEndpoint = "https://api.msn.com/weather/overview?locale=zh-cn&lat={lat}&lon={lon}&appId=9e21380c-ff19-4c78-b4ea-19558e93a5d3&apiKey={key}&ocid=msftweather&wrapOData=false&units=C&pastPeriods=1&days=10&hours=24"
+            val legacyMsnNoCredentialEndpoint = "https://api.msn.com/weather/overview?locale=zh-cn&lat={lat}&lon={lon}&appId=9e21380c-ff19-4c78-b4ea-19558e93a5d3&ocid=msftweather&wrapOData=false&units=C&pastPeriods=1&days=10&hours=24"
             val endpoint = when {
                 default.sourceId == SourceId.QWeather &&
                     savedEndpoint.contains("devapi.qweather.com", ignoreCase = true) -> default.endpoint
@@ -520,10 +527,10 @@ internal object ApiConfigStore {
                     savedEndpoint == legacyOpenMeteoEndpoint -> default.endpoint
                 schemaVersion < CurrentSchemaVersion &&
                     default.sourceId == SourceId.XiaomiWeather &&
-                    savedEndpoint == legacyXiaomiEndpoint -> default.endpoint
+                    savedEndpoint in setOf(legacyXiaomiCredentialEndpoint, legacyXiaomiNoCredentialEndpoint) -> default.endpoint
                 schemaVersion < CurrentSchemaVersion &&
                     default.sourceId == SourceId.MsnWeather &&
-                    savedEndpoint == legacyMsnEndpoint -> default.endpoint
+                    savedEndpoint in setOf(legacyMsnCredentialEndpoint, legacyMsnNoCredentialEndpoint) -> default.endpoint
                 else -> savedEndpoint
             }
             val savedHost = prefs.getString(prefix + ApiHostSuffix, default.apiHost).orEmpty()
@@ -552,7 +559,9 @@ internal object ApiConfigStore {
         }
         if (schemaVersion < CurrentSchemaVersion) {
             save(context, configs)
-            if (recoverSeniverse || recoverBuiltInNoKeyWeather) ApiFailureStatusStore.clear(context)
+            if (recoverSeniverse || recoverBuiltInNoKeyWeather || clearBuiltInWeatherEndpointFailure) {
+                ApiFailureStatusStore.clear(context)
+            }
         }
         return configs
     }

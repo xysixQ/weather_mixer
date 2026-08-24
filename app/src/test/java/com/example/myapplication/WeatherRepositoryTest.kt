@@ -1,23 +1,32 @@
 ﻿package com.weathermixer.sixq
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WeatherRepositoryTest {
     @Test
-    fun xiaomiAndMsnDefaultsDoNotRequireKeys() {
+    fun xiaomiAndMsnDefaultsUseHiddenEndpointCredentialsWithoutUserKeys() {
         val configs = ApiConfigDefaults.defaultConfigs()
         val xiaomi = configs.first { it.sourceId == SourceId.XiaomiWeather }
         val msn = configs.first { it.sourceId == SourceId.MsnWeather }
 
         assertFalse(xiaomi.requiresKey)
         assertTrue(xiaomi.apiKey.isBlank())
-        assertFalse(xiaomi.endpoint.contains("appKey="))
-        assertFalse(xiaomi.endpoint.contains("sign="))
+        assertTrue(xiaomi.endpoint.contains("appKey="))
+        assertTrue(xiaomi.endpoint.contains("sign="))
         assertFalse(msn.requiresKey)
         assertTrue(msn.apiKey.isBlank())
-        assertFalse(msn.endpoint.contains("apiKey="))
+        assertTrue(msn.endpoint.contains("apiKey="))
+
+        val hiddenXiaomiEndpoint = hideBuiltInEndpointCredentials(xiaomi.endpoint, xiaomi.endpoint)
+        val hiddenMsnEndpoint = hideBuiltInEndpointCredentials(msn.endpoint, msn.endpoint)
+        assertTrue(hiddenXiaomiEndpoint.contains("appKey=$BuiltInCredentialPlaceholder"))
+        assertTrue(hiddenXiaomiEndpoint.contains("sign=$BuiltInCredentialPlaceholder"))
+        assertTrue(hiddenMsnEndpoint.contains("apiKey=$BuiltInCredentialPlaceholder"))
+        assertEquals(xiaomi.endpoint, restoreBuiltInEndpointCredentials(hiddenXiaomiEndpoint, xiaomi.endpoint))
+        assertEquals(msn.endpoint, restoreBuiltInEndpointCredentials(hiddenMsnEndpoint, msn.endpoint))
     }
 
     @Test

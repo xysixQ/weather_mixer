@@ -414,6 +414,9 @@ internal data class WeatherApiConfig(
 }
 
 internal const val BuiltInCredentialPlaceholder = "{内置凭据}"
+internal const val XiaomiWeatherAppKey = "weather20151024"
+internal const val XiaomiWeatherSign = "zUFJoAR2ZVrDy1vF3D07"
+internal const val MsnWeatherApiKey = "j5i4gDqHL6nGYwx5wi5kRhXjtf2c5qgFX9fzfk0TOo"
 
 internal val endpointCredentialPattern = Regex(
     pattern = """(?i)([?&])(apiKey|appKey|sign)=([^&]*)""",
@@ -524,14 +527,14 @@ internal object ApiConfigDefaults {
         WeatherApiConfig(
             sourceId = SourceId.XiaomiWeather,
             displayName = "小米天气",
-            endpoint = "https://weatherapi.market.xiaomi.com/wtr-v3/weather/all?latitude={lat}&longitude={lon}&isLocated=false&locationKey=weathercn:{locationKey}&days=15&isGlobal=false&locale=zh_CN",
+            endpoint = "https://weatherapi.market.xiaomi.com/wtr-v3/weather/all?latitude={lat}&longitude={lon}&isLocated=false&locationKey=weathercn:{locationKey}&days=15&appKey=$XiaomiWeatherAppKey&sign=$XiaomiWeatherSign&isGlobal=false&locale=zh_cn",
             apiKey = "",
             userAgent = "",
             enabled = true,
             requiresKey = false,
             hasBuiltInDefault = true,
             needsUserAgent = false,
-            note = "小米天气国内源，无 Key；用城市 key 请求 weather/all。",
+            note = "小米天气国内源；内置 endpoint 参数会在设置页隐藏，无需用户手填 Key。",
         ),
         WeatherApiConfig(
             sourceId = SourceId.Cnemc,
@@ -585,14 +588,14 @@ internal object ApiConfigDefaults {
         WeatherApiConfig(
             sourceId = SourceId.MsnWeather,
             displayName = "MSN 天气",
-            endpoint = "https://api.msn.com/weather/overview?locale=zh-cn&lat={lat}&lon={lon}&appId=9e21380c-ff19-4c78-b4ea-19558e93a5d3&ocid=msftweather&wrapOData=false&units=C&pastPeriods=1&days=10&hours=24",
+            endpoint = "https://api.msn.com/weather/overview?locale=zh-cn&lat={lat}&lon={lon}&appId=9e21380c-ff19-4c78-b4ea-19558e93a5d3&apiKey=$MsnWeatherApiKey&ocid=msftweather&wrapOData=false&units=C&pastPeriods=1&days=10&hours=24",
             apiKey = "",
             userAgent = "WeatherFusionAssistant/1.0",
             enabled = true,
             requiresKey = false,
             hasBuiltInDefault = true,
             needsUserAgent = false,
-            note = "MSN 天气综合源，无 Key；提供实况、逐日、逐小时、日出日落和月相。",
+            note = "MSN 天气综合源；内置 endpoint 参数会在设置页隐藏，无需用户手填 Key。",
         ),
         WeatherApiConfig(
             sourceId = SourceId.OpenWeather,
