@@ -57,6 +57,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -360,7 +362,13 @@ internal fun SourceWeightRow(item: SourceWeightView) {
 }
 
 @Composable
-internal fun AdviceCard(title: String, subtitle: String, advice: List<PersonalizedAdvice>, onClick: () -> Unit) {
+internal fun AdviceCard(
+    title: String,
+    subtitle: String,
+    advice: List<PersonalizedAdvice>,
+    onClick: () -> Unit,
+    itemReason: ((PersonalizedAdvice) -> String)? = null,
+) {
     val orderedAdvice = remember(advice) {
         advice.sortedByDescending { item -> item.level.ordinal }
     }
@@ -369,7 +377,7 @@ internal fun AdviceCard(title: String, subtitle: String, advice: List<Personaliz
         modifier = Modifier
             .floatingCardMotion()
             .clip(shape)
-            .clickable(onClick = onClick),
+            .let { base -> if (itemReason == null) base.clickable(onClick = onClick) else base },
         shape = shape,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)),
     ) {
@@ -392,16 +400,36 @@ internal fun AdviceCard(title: String, subtitle: String, advice: List<Personaliz
                 }
                 Icon(Icons.Filled.HealthAndSafety, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
             }
-            orderedAdvice.forEach { item -> AdviceItem(item) }
+            var expandedAdviceKey by remember(advice) { mutableStateOf<String?>(null) }
+            orderedAdvice.forEach { item ->
+                val itemKey = "${item.title}:${item.detail}"
+                AdviceItem(
+                    item = item,
+                    reason = itemReason?.invoke(item),
+                    forceExpanded = itemReason?.let { expandedAdviceKey == itemKey },
+                    onClick = itemReason?.let {
+                        {
+                            expandedAdviceKey = if (expandedAdviceKey == itemKey) null else itemKey
+                        }
+                    },
+                )
+            }
         }
     }
 }
 
 @Composable
-internal fun AdviceItem(item: PersonalizedAdvice) {
+internal fun AdviceItem(
+    item: PersonalizedAdvice,
+    reason: String? = null,
+    forceExpanded: Boolean? = null,
+    onClick: (() -> Unit)? = null,
+) {
     val isVehicleRestriction = item.title == "机动车限行"
+    val externallyExpandable = onClick != null
     val darkTheme = LocalAppDarkTheme.current
-    var expanded by remember(item) { mutableStateOf(!isVehicleRestriction) }
+    var internalExpanded by remember(item) { mutableStateOf(!isVehicleRestriction) }
+    val expanded = forceExpanded ?: internalExpanded
     val shape = RoundedCornerShape(18.dp)
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -419,9 +447,9 @@ internal fun AdviceItem(item: PersonalizedAdvice) {
         isVehicleRestriction && darkTheme -> Color(0xFF6A602F)
         isVehicleRestriction -> Color(0xFFFFF8D8)
         else -> when (item.level) {
-        AdviceLevel.Info -> MaterialTheme.colorScheme.secondaryContainer
-        AdviceLevel.Caution -> MaterialTheme.colorScheme.tertiaryContainer
-        AdviceLevel.Warning -> MaterialTheme.colorScheme.errorContainer
+            AdviceLevel.Info -> MaterialTheme.colorScheme.secondaryContainer
+            AdviceLevel.Caution -> MaterialTheme.colorScheme.tertiaryContainer
+            AdviceLevel.Warning -> MaterialTheme.colorScheme.errorContainer
         }
     }
     val containerColor = lerp(baseContainerColor, Color.Black, pressedDepth)
@@ -429,9 +457,9 @@ internal fun AdviceItem(item: PersonalizedAdvice) {
         isVehicleRestriction && darkTheme -> Color(0xFFFFE082)
         isVehicleRestriction -> Color(0xFF6D4C00)
         else -> when (item.level) {
-        AdviceLevel.Info -> MaterialTheme.colorScheme.secondary
-        AdviceLevel.Caution -> MaterialTheme.colorScheme.tertiary
-        AdviceLevel.Warning -> MaterialTheme.colorScheme.error
+            AdviceLevel.Info -> MaterialTheme.colorScheme.secondary
+            AdviceLevel.Caution -> MaterialTheme.colorScheme.tertiary
+            AdviceLevel.Warning -> MaterialTheme.colorScheme.error
         }
     }
     val rowModifier = Modifier
@@ -439,16 +467,21 @@ internal fun AdviceItem(item: PersonalizedAdvice) {
         .clip(shape)
         .background(containerColor.copy(alpha = if (isVehicleRestriction) 0.54f else 0.72f))
         .let { base ->
-            if (isVehicleRestriction) {
+            if (isVehicleRestriction || externallyExpandable) {
                 base.clickable(
                     interactionSource = interactionSource,
                     indication = null,
-                ) { expanded = !expanded }
+                ) {
+                    if (externallyExpandable) {
+                        onClick?.invoke()
+                    } else {
+                        internalExpanded = !internalExpanded
+                    }
+                }
             } else {
                 base
             }
         }
-        .animateContentSize(animationSpec = tween(460, easing = FastOutSlowInEasing))
         .padding(12.dp)
     Row(
         modifier = rowModifier,
@@ -459,10 +492,10 @@ internal fun AdviceItem(item: PersonalizedAdvice) {
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(item.title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                if (isVehicleRestriction) {
+                if (isVehicleRestriction || externallyExpandable) {
                     Icon(
                         Icons.Filled.KeyboardArrowDown,
-                        contentDescription = if (expanded) "收起限行详情" else "展开限行详情",
+                        contentDescription = if (expanded) "收起建议详情" else "展开建议详情",
                         modifier = Modifier
                             .size(22.dp)
                             .graphicsLayer { rotationZ = arrowRotation },
@@ -481,6 +514,20 @@ internal fun AdviceItem(item: PersonalizedAdvice) {
                 maxLines = if (expanded) Int.MAX_VALUE else 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            AnimatedVisibility(
+                visible = expanded && reason != null,
+                enter = expandVertically(animationSpec = tween(220, easing = FastOutSlowInEasing)) + fadeIn(tween(140)),
+                exit = shrinkVertically(animationSpec = tween(180, easing = FastOutSlowInEasing)) + fadeOut(tween(120)),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f))
+                    Text(
+                        text = reason.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isVehicleRestriction && darkTheme) Color(0xFFFFF4C2) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }
@@ -566,7 +613,7 @@ internal fun ApiSettingsCard(
                 }
             }
             Text(
-                text = "小米城市搜索、小米天气、MSN、Open-Meteo、met.no、NWS 等源已有默认 endpoint；和风需同时填写专属 API Host 和 Key。",
+                text = "小米城市搜索、彩云天气、MSN、Open-Meteo、met.no、NWS 等源已有默认 endpoint；和风需同时填写专属 API Host 和 Key。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -913,30 +960,50 @@ internal fun WeatherMiniIcon(
             val moonBounds = Offset(center.x - 30f * scale, center.y - 36f * scale)
             val moonSize = Size(58f * scale, 58f * scale)
             if (clearNight) {
-                drawArc(
-                    color = Color(0xFF173553),
-                    startAngle = 48f,
-                    sweepAngle = 258f,
-                    useCenter = false,
-                    topLeft = moonBounds,
-                    size = moonSize,
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(20f * scale, cap = StrokeCap.Round),
-                )
-                drawArc(
-                    color = Color(0xFFF4FAFF),
-                    startAngle = 48f,
-                    sweepAngle = 258f,
-                    useCenter = false,
-                    topLeft = moonBounds,
-                    size = moonSize,
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(11f * scale, cap = StrokeCap.Round),
-                )
+                val moonColor = Color(0xFFFFF1A8)
+                val starColor = Color(0xFFEAF3FF)
+                val moonPath = Path().apply {
+                    moveTo(center.x + 18f * scale, center.y - 34f * scale)
+                    cubicTo(
+                        center.x - 7f * scale,
+                        center.y - 31f * scale,
+                        center.x - 27f * scale,
+                        center.y - 11f * scale,
+                        center.x - 27f * scale,
+                        center.y + 12f * scale,
+                    )
+                    cubicTo(
+                        center.x - 27f * scale,
+                        center.y + 36f * scale,
+                        center.x - 1f * scale,
+                        center.y + 51f * scale,
+                        center.x + 25f * scale,
+                        center.y + 36f * scale,
+                    )
+                    cubicTo(
+                        center.x + 7f * scale,
+                        center.y + 35f * scale,
+                        center.x - 7f * scale,
+                        center.y + 19f * scale,
+                        center.x - 7f * scale,
+                        center.y + 1f * scale,
+                    )
+                    cubicTo(
+                        center.x - 7f * scale,
+                        center.y - 15f * scale,
+                        center.x + 2f * scale,
+                        center.y - 29f * scale,
+                        center.x + 18f * scale,
+                        center.y - 34f * scale,
+                    )
+                    close()
+                }
+                drawPath(moonPath, moonColor)
                 listOf(
-                    Offset(center.x + 34f * scale, center.y - 28f * scale) to 3.2f,
-                    Offset(center.x + 42f * scale, center.y - 7f * scale) to 2.5f,
+                    Offset(center.x + 34f * scale, center.y - 26f * scale) to 3.3f,
+                    Offset(center.x + 42f * scale, center.y - 4f * scale) to 2.4f,
                 ).forEach { (starCenter, radius) ->
-                    drawCircle(Color(0xFF173553), radius = (radius + 2.2f) * scale, center = starCenter)
-                    drawCircle(Color(0xFFFFF4B8), radius = radius * scale, center = starCenter)
+                    drawCircle(starColor, radius = radius * scale, center = starCenter)
                 }
             } else {
                 drawArc(

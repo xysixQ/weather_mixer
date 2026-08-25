@@ -623,8 +623,10 @@ internal fun rememberIsOnline(): Boolean {
     fun currentState(): Boolean {
         val network = connectivityManager.activeNetwork ?: return false
         val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+        val hasInternet = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ||
             capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        val captivePortal = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL)
+        return hasInternet && !captivePortal
     }
     var isOnline by remember(connectivityManager) { mutableStateOf(currentState()) }
     DisposableEffect(connectivityManager) {
@@ -646,7 +648,7 @@ internal fun rememberIsOnline(): Boolean {
 
 internal fun apiFailureStatusForRegion(status: String?, region: District): String? {
     if (status.isNullOrBlank() || region.isDomestic) return status
-    val domesticOnlyNames = listOf("小米天气", "高德天气", "中国环境监测总站", "心知天气")
+    val domesticOnlyNames = listOf("彩云天气", "\u5c0f\u7c73\u5929\u6c14", "高德天气", "中国环境监测总站", "心知天气")
     return status
         .split(" · ")
         .filterNot { entry -> domesticOnlyNames.any(entry::startsWith) }
@@ -657,14 +659,8 @@ internal fun apiFailureStatusForRegion(status: String?, region: District): Strin
 internal fun shouldAutoDisableApiSource(config: WeatherApiConfig): Boolean =
     config.requiresKey || !config.hasBuiltInDefault
 
-internal fun normalizeLocationMethodForConfigs(
-    method: LocationMethod,
-    configs: List<WeatherApiConfig>,
-): LocationMethod {
-    if (method != LocationMethod.BaiduIp) return method
-    val baiduConfig = configs.firstOrNull { it.sourceId == SourceId.BaiduIpLocation }
-    return if (baiduConfig?.isReady == true) method else LocationMethod.Device
-}
+internal fun isBaiduIpLocationReady(configs: List<WeatherApiConfig>): Boolean =
+    configs.firstOrNull { it.sourceId == SourceId.BaiduIpLocation }?.isReady == true
 
 @Composable
 internal fun DetailCardAnchor(
@@ -689,6 +685,7 @@ internal fun DetailCardAnchor(
 internal fun WeatherAdvisorApp(
     themeMode: ThemeMode = ThemeMode.System,
     onThemeModeChanged: (ThemeMode) -> Unit = {},
+    initialPage: AppPage = AppPage.Dashboard,
 ) {
     val context = LocalContext.current
     val repository = remember { WeatherRepository() }
@@ -718,7 +715,7 @@ internal fun WeatherAdvisorApp(
     val weatherStore = remember {
         WeatherStore(
             WeatherContract.UiState(
-                currentPage = AppPage.Dashboard,
+                currentPage = initialPage,
                 isRefreshing = false,
                 backgroundMotionEnabled = true,
                 dashboardOrder = DashboardOrderStore.load(context),
@@ -808,13 +805,6 @@ internal fun WeatherAdvisorApp(
         }
     }
 
-    LaunchedEffect(apiConfigs, locationMethod) {
-        val normalizedMethod = normalizeLocationMethodForConfigs(locationMethod, apiConfigs)
-        if (normalizedMethod != locationMethod) {
-            locationMethod = normalizedMethod
-            LocationMethodStore.save(context, normalizedMethod)
-        }
-    }
 
     LaunchedEffect(currentPage) {
         if (currentPage != previousHapticPage && hapticFeedbackEnabled) {
@@ -1264,15 +1254,10 @@ internal fun WeatherAdvisorApp(
                 onUseCurrentLocation = {
                     scope.launch {
                         locationMessage = "正在请求当前位置..."
-                        val effectiveMethod = normalizeLocationMethodForConfigs(locationMethod, apiConfigs)
-                        if (effectiveMethod != locationMethod) {
-                            locationMethod = effectiveMethod
-                            LocationMethodStore.save(context, effectiveMethod)
-                        }
                         val result = repository.locateCurrentPosition(
                             context = context,
                             apiConfigs = apiConfigs,
-                            method = effectiveMethod,
+                            method = locationMethod,
                         )
                         val position = result.position
                         if (position == null) {

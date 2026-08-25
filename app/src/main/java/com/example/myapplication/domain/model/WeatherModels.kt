@@ -1,4 +1,4 @@
-﻿package com.weathermixer.sixq
+package com.weathermixer.sixq
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -357,7 +357,7 @@ internal data class District(
             .joinToString(", ")
     }
     val recommendedSources: List<String> = when {
-        isDomestic -> listOf("小米天气", "高德天气", "和风天气", "MSN 天气")
+        isDomestic -> listOf("彩云天气", "高德天气", "和风天气", "MSN 天气")
         countryCode == "US" -> listOf("NWS", "MSN 天气", "OpenWeather", "Open-Meteo")
         else -> listOf("MSN 天气", "Open-Meteo", "OpenWeather", "met.no")
     }
@@ -460,6 +460,8 @@ internal fun endpointVariableHelp(config: WeatherApiConfig, defaultEndpoint: Str
     val template = config.endpoint.ifBlank { defaultEndpoint }
     val descriptions = mapOf(
         "key" to "API Key 或 Token",
+        "ak" to "百度地图 AK",
+        "baiduAk" to "百度地图 AK",
         "host" to "API Host（不含 https://）",
         "sign" to "API 签名",
         "lat" to "纬度",
@@ -510,7 +512,7 @@ internal object ApiConfigDefaults {
             requiresKey = false,
             hasBuiltInDefault = true,
             needsUserAgent = false,
-            note = "无 Key 城市搜索源；返回 weathercn 城市 key，供小米天气接口继续使用。",
+            note = "无 Key 城市搜索源；返回 weathercn 城市 key，供彩云天气接口继续使用。",
         ),
         WeatherApiConfig(
             sourceId = SourceId.XiaomiCityGeo,
@@ -526,7 +528,7 @@ internal object ApiConfigDefaults {
         ),
         WeatherApiConfig(
             sourceId = SourceId.XiaomiWeather,
-            displayName = "小米天气",
+            displayName = "彩云天气",
             endpoint = "https://weatherapi.market.xiaomi.com/wtr-v3/weather/all?latitude={lat}&longitude={lon}&isLocated=false&locationKey=weathercn:{locationKey}&days=15&appKey=$XiaomiWeatherAppKey&sign=$XiaomiWeatherSign&isGlobal=false&locale=zh_cn",
             apiKey = "",
             userAgent = "",
@@ -534,7 +536,7 @@ internal object ApiConfigDefaults {
             requiresKey = false,
             hasBuiltInDefault = true,
             needsUserAgent = false,
-            note = "小米天气国内源；内置 endpoint 参数会在设置页隐藏，无需用户手填 Key。",
+            note = "彩云天气国内源；内置 endpoint 参数会在设置页隐藏，无需用户手填 Key。",
         ),
         WeatherApiConfig(
             sourceId = SourceId.Cnemc,

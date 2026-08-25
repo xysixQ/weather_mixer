@@ -517,7 +517,7 @@ internal object WeatherFusionEngine {
         if (values.size < 3) return null
         val median = values.map { it.second }.sorted().let { it[it.size / 2] }
         val outliers = values.filter { abs(it.second - median) > metric.outlierTolerance }
-            .filter { (name, _) -> name != "小米天气" || !region.isDomestic }
+            .filter { (name, _) -> name != "彩云天气" || !region.isDomestic }
         if (outliers.isEmpty()) return null
         return "$label 发现 ${outliers.joinToString { it.first }} 与多数源偏离，已在融合时降权。"
     }

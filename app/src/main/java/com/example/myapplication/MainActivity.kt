@@ -30,13 +30,14 @@ class MainActivity : ComponentActivity() {
                         themeMode = mode
                         ThemeModeStore.save(this, mode)
                     },
+                    initialPage = debugInitialPage(),
                 )
             }
         }
         val observer = window.decorView.viewTreeObserver
         observer.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
             override fun onPreDraw(): Boolean {
-                if (observer.isAlive) observer.removeOnPreDrawListener(this)
+                window.decorView.viewTreeObserver.removeOnPreDrawListener(this)
                 if (BuildConfig.DEBUG) {
                     Log.i("WeatherStartup", "first frame ready: ${SystemClock.elapsedRealtime() - startupStarted} ms")
                 }
@@ -44,6 +45,15 @@ class MainActivity : ComponentActivity() {
                 return true
             }
         })
+    }
+
+    private fun debugInitialPage(): AppPage {
+        if (!BuildConfig.DEBUG) return AppPage.Dashboard
+        return when (intent.getStringExtra("startPage")) {
+            "tools" -> AppPage.Tools
+            "settings" -> AppPage.Settings
+            else -> AppPage.Dashboard
+        }
     }
 
     private fun preferHighestRefreshRate() {

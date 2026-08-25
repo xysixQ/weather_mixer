@@ -77,7 +77,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -127,8 +127,6 @@ import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsBus
@@ -459,10 +457,11 @@ internal fun DashboardScreen(
         }
     }
     val compactHeader by remember { derivedStateOf { collapseProgress >= 0.82f } }
+    val dashboardContentVisible = selectedDetail == null || expandedLayout
     val dashboardContentAlpha by animateFloatAsState(
-        targetValue = if ((selectedDetail == null && detailOriginBounds == Rect.Zero) || expandedLayout) 1f else 0f,
-        animationSpec = if ((selectedDetail == null && detailOriginBounds == Rect.Zero) || expandedLayout) {
-            tween(160, easing = FastOutSlowInEasing)
+        targetValue = if (dashboardContentVisible) 1f else 0f,
+        animationSpec = if (dashboardContentVisible) {
+            tween(180, easing = FastOutSlowInEasing)
         } else {
             tween(140, easing = FastOutSlowInEasing)
         },
@@ -677,7 +676,10 @@ internal fun DashboardScreen(
         if (latestHapticFeedbackEnabled) {
             homeReorderHapticJob?.cancel()
             homeReorderHapticJob = reorderScope.launch {
-                context.performAppVibration(AppVibration.ReorderBuzz, view = view)
+                repeat(2) { index ->
+                    context.performAppVibration(AppVibration.ReorderBuzz, view = view)
+                    if (index == 0) delay(34L)
+                }
             }
         }
         homeDraftOrder = moveDashboardBlock(latestHomeDraftOrder, currentIndex, targetIndex)
@@ -870,7 +872,7 @@ internal fun DashboardScreen(
                     collapseProgress = collapseProgress,
                     foregroundColor = weatherTextColor,
                     onTemperaturePositioned = { position ->
-                        if (expandedTemperatureAnchor == null || (!listState.canScrollBackward && pullDistance < 1f)) {
+                        if (expandedTemperatureAnchor == null || !listState.canScrollBackward || pullDistance > 0f) {
                             expandedTemperatureAnchor = position
                         }
                     },
@@ -909,7 +911,7 @@ internal fun DashboardScreen(
                                         if (layoutDelta.getDistance() > 0.5f) {
                                             if (isDragging) {
                                                 homeDragOffset += layoutDelta
-                                            } else {
+                                            } else if (homeDraggedBlock != null) {
                                                 placementJob?.cancel()
                                                 val start = placementOffset + layoutDelta
                                                 placementOffset = start
@@ -917,12 +919,15 @@ internal fun DashboardScreen(
                                                     val animation = ComposeAnimatable(0f)
                                                     animation.animateTo(
                                                         1f,
-                                                        tween(360, easing = FastOutSlowInEasing),
+                                                        tween(220, easing = FastOutSlowInEasing),
                                                     ) {
                                                         placementOffset = start * (1f - value)
                                                     }
                                                     placementOffset = Offset.Zero
                                                 }
+                                            } else {
+                                                placementJob?.cancel()
+                                                placementOffset = Offset.Zero
                                             }
                                         }
                                     }
@@ -971,6 +976,7 @@ internal fun DashboardScreen(
                                                     title = "个性化建议",
                                                     subtitle = "${profile.occupation.label} · ${profile.commuteMode.label}",
                                                     advice = snapshot.advice,
+                                                    itemReason = { advice -> adviceReason(advice, snapshot.fused, profile, temperatureUnit::format) },
                                                     onClick = onClick,
                                                 )
                                             }
@@ -999,7 +1005,7 @@ internal fun DashboardScreen(
                                                         snapshot.astronomy,
                                                         snapshot.region.longitude,
                                                         onClick = {
-                                                            selectedForecastHour = null
+                                                            selectedForecastHour = snapshot.hourlyForecast.firstOrNull()
                                                             selectedForecastDay = null
                                                             onClick()
                                                         },
@@ -1477,6 +1483,7 @@ internal fun DashboardDetailScreen(
     val selectedDayIndex = selectedForecastDay?.let { selected ->
         snapshot.dailyForecast.indexOfFirst { it.timeMillis == selected.timeMillis }
     } ?: -1
+    var dailyPageDirection by remember { mutableIntStateOf(1) }
     val sourceNames = remember(detail, snapshot) {
         val matching = when (detail) {
             DashboardDetail.Alert -> snapshot.readings.filter { it.alert != null }
@@ -1517,8 +1524,41 @@ internal fun DashboardDetailScreen(
             }
         }
         item {
+            val detailCardModifier = if (detail == DashboardDetail.Daily && selectedForecastDay != null && selectedDayIndex >= 0) {
+                var dailySwipeDistance = 0f
+                Modifier
+                    .fillMaxWidth()
+                    .pointerInput(selectedForecastDay.timeMillis, selectedDayIndex, snapshot.dailyForecast) {
+                        detectHorizontalDragGestures(
+                            onDragStart = { dailySwipeDistance = 0f },
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                dailySwipeDistance += dragAmount
+                            },
+                            onDragEnd = {
+                                val threshold = with(density) { 48.dp.toPx() }
+                                val nextIndex = when {
+                                    dailySwipeDistance < -threshold -> selectedDayIndex + 1
+                                    dailySwipeDistance > threshold -> selectedDayIndex - 1
+                                    else -> selectedDayIndex
+                                }
+                                if (nextIndex in snapshot.dailyForecast.indices && nextIndex != selectedDayIndex) {
+                                    dailyPageDirection = if (nextIndex > selectedDayIndex) 1 else -1
+                                    if (hapticFeedbackEnabled) {
+                                        context.performAppVibration(AppVibration.ReorderBuzz)
+                                    }
+                                    onSelectedForecastDayChange(snapshot.dailyForecast[nextIndex])
+                                }
+                                dailySwipeDistance = 0f
+                            },
+                            onDragCancel = { dailySwipeDistance = 0f },
+                        )
+                    }
+            } else {
+                Modifier.fillMaxWidth()
+            }
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = detailCardModifier,
                 shape = RoundedCornerShape(28.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = containerAlpha),
@@ -1540,65 +1580,52 @@ internal fun DashboardDetailScreen(
                             Text(weather.alert.detail, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         DashboardDetail.Advice -> {
+                            var expandedAdviceKey by remember(snapshot.advice) { mutableStateOf<String?>(null) }
                             Text("${profile.occupation.label} · ${profile.commuteMode.label}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            snapshot.advice.sortedByDescending { it.level.ordinal }.forEach { AdviceItem(it) }
+                            snapshot.advice.sortedByDescending { it.level.ordinal }.forEach { advice ->
+                                val adviceKey = "${advice.title}:${advice.detail}"
+                                AdviceItem(
+                                    item = advice,
+                                    reason = adviceReason(advice, weather, profile, temperatureUnit::format),
+                                    forceExpanded = expandedAdviceKey == adviceKey,
+                                    onClick = {
+                                        expandedAdviceKey = if (expandedAdviceKey == adviceKey) null else adviceKey
+                                    },
+                                )
+                            }
                         }
                         DashboardDetail.Daily -> if (selectedForecastDay != null) {
                             val day = selectedForecastDay
-                            var dailySwipeDistance by remember(day.timeMillis) { mutableFloatStateOf(0f) }
-                            Row(
-                                modifier = Modifier.pointerInput(day.timeMillis, selectedDayIndex, snapshot.dailyForecast) {
-                                    detectDragGestures(
-                                        onDrag = { change, dragAmount ->
-                                            change.consume()
-                                            dailySwipeDistance += dragAmount.x
-                                        },
-                                        onDragEnd = {
-                                            val threshold = with(density) { 46.dp.toPx() }
-                                            val nextIndex = when {
-                                                dailySwipeDistance < -threshold -> (selectedDayIndex + 1)
-                                                dailySwipeDistance > threshold -> (selectedDayIndex - 1)
-                                                else -> selectedDayIndex
-                                            }
-                                            if (nextIndex in snapshot.dailyForecast.indices && nextIndex != selectedDayIndex) {
-                                                onSelectedForecastDayChange(snapshot.dailyForecast[nextIndex])
-                                            }
-                                            dailySwipeDistance = 0f
-                                        },
-                                        onDragCancel = { dailySwipeDistance = 0f },
-                                    )
+                            AnimatedContent(
+                                targetState = day,
+                                transitionSpec = {
+                                    val direction = dailyPageDirection
+                                    (fadeIn(tween(160)) + slideInHorizontally(tween(240, easing = FastOutSlowInEasing)) { direction * it / 3 }) togetherWith
+                                        (fadeOut(tween(140)) + slideOutHorizontally(tween(220, easing = FastOutSlowInEasing)) { -direction * it / 3 })
                                 },
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                WeatherMiniIcon(day.condition)
-                                Spacer(Modifier.width(10.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(forecastDayLabel(day).replace("\n", " "), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                                    Text(day.condition.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                IconButton(
-                                    enabled = selectedDayIndex > 0,
-                                    onClick = { onSelectedForecastDayChange(snapshot.dailyForecast[selectedDayIndex - 1]) },
-                                ) {
-                                    Icon(Icons.Filled.ChevronLeft, contentDescription = "前一天")
-                                }
-                                IconButton(
-                                    enabled = selectedDayIndex in 0 until snapshot.dailyForecast.lastIndex,
-                                    onClick = { onSelectedForecastDayChange(snapshot.dailyForecast[selectedDayIndex + 1]) },
-                                ) {
-                                    Icon(Icons.Filled.ChevronRight, contentDescription = "后一天")
+                                label = "dailyForecastDetailSwipe",
+                            ) { animatedDay ->
+                                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        WeatherMiniIcon(animatedDay.condition)
+                                        Spacer(Modifier.width(10.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(forecastDayLabel(animatedDay).replace("\n", " "), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                            Text(animatedDay.condition.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                    DetailDivider()
+                                    DetailValueRow("温度", "${temperatureUnit.format(animatedDay.lowC)} ~ ${temperatureUnit.format(animatedDay.highC)}")
+                                    DetailDivider()
+                                    DetailValueRow("降水概率", animatedDay.rainProbability?.let { "${it.roundToInt()}%" } ?: "暂无数据")
+                                    DetailDivider()
+                                    DetailValueRow("风速", animatedDay.windKph?.let { "${oneDecimal(it)} km/h" } ?: "暂无数据")
+                                    DetailDivider()
+                                    DetailValueRow("空气质量", animatedDay.aqi?.let { "AQI $it" } ?: "暂无数据")
+                                    DetailDivider()
+                                    DetailValueRow("日出 / 日落", "${animatedDay.sunrise ?: "--:--"} / ${animatedDay.sunset ?: "--:--"}")
                                 }
                             }
-                            DetailDivider()
-                            DetailValueRow("温度", "${temperatureUnit.format(day.lowC)} ~ ${temperatureUnit.format(day.highC)}")
-                            DetailDivider()
-                            DetailValueRow("降水概率", day.rainProbability?.let { "${it.roundToInt()}%" } ?: "暂无数据")
-                            DetailDivider()
-                            DetailValueRow("风速", day.windKph?.let { "${oneDecimal(it)} km/h" } ?: "暂无数据")
-                            DetailDivider()
-                            DetailValueRow("空气质量", day.aqi?.let { "AQI $it" } ?: "暂无数据")
-                            DetailDivider()
-                            DetailValueRow("日出 / 日落", "${day.sunrise ?: "--:--"} / ${day.sunset ?: "--:--"}")
                         } else {
                             snapshot.dailyForecast.forEachIndexed { index, day ->
                                 if (index > 0) {
@@ -1610,16 +1637,17 @@ internal fun DashboardDetailScreen(
                                 )
                             }
                         }
-                        DashboardDetail.Hourly -> if (selectedForecastHour != null) {
-                            val hour = selectedForecastHour
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                WeatherMiniIcon(hour.condition)
-                                Spacer(Modifier.width(10.dp))
-                                Column {
-                                    Text(formatForecastTime(hour.timeMillis), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                                    Text(hour.condition.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
+                        DashboardDetail.Hourly -> (selectedForecastHour ?: snapshot.hourlyForecast.firstOrNull())?.let { hour ->
+                            val nearbyHours = remember(snapshot.hourlyForecast, hour.timeMillis) {
+                                hourlyDetailWindow(snapshot.hourlyForecast, hour.timeMillis)
                             }
+                            HourlyDetailOverview(
+                                hour = hour,
+                                nearbyHours = nearbyHours,
+                                isNight = isNightTime(hour.timeMillis, snapshot.astronomy, snapshot.region.longitude),
+                                formatTemperature = temperatureUnit::format,
+                                convertTemperature = temperatureUnit::convert,
+                            )
                             DetailDivider()
                             DetailValueRow("温度", temperatureUnit.format(hour.temperatureC))
                             DetailDivider()
@@ -1630,15 +1658,7 @@ internal fun DashboardDetailScreen(
                             DetailValueRow("风向", hour.windDirection?.let { "${it.roundToInt()}°" } ?: "暂无数据")
                             DetailDivider()
                             DetailValueRow("空气质量", hour.aqi?.let { "AQI $it" } ?: "暂无数据")
-                        } else {
-                            snapshot.hourlyForecast.take(24).forEachIndexed { index, hour ->
-                                if (index > 0) DetailDivider()
-                                DetailValueRow(
-                                    label = formatForecastTime(hour.timeMillis),
-                                    value = "${temperatureUnit.format(hour.temperatureC)} · ${hour.condition.label} · 降雨 ${hour.rainProbability?.roundToInt() ?: 0}% · 风 ${hour.windKph?.let { oneDecimal(it) } ?: "-"} km/h",
-                                )
-                            }
-                        }
+                        } ?: Text("暂无逐小时预报", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         DashboardDetail.Precipitation -> {
                             AnimatedNumberText(
                                 value = weather.rainProbability,
@@ -1647,7 +1667,6 @@ internal fun DashboardDetailScreen(
                                 fontWeight = FontWeight.Bold,
                             )
                             DetailValueRow("未来一小时雨量", "${oneDecimal(weather.rainNextHourMm)} mm")
-                            Text("概率表示当前时段出现降水的可能性；雨量表示预计累计降水深度。", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         DashboardDetail.Wind -> {
                             AnimatedNumberText(
@@ -1656,7 +1675,6 @@ internal fun DashboardDetailScreen(
                                 style = MaterialTheme.typography.displaySmall,
                                 fontWeight = FontWeight.Bold,
                             )
-                            Text("风速由可用天气源加权融合。逐小时风况可在逐小时预报中查看。", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         DashboardDetail.AirQuality -> {
                             AnimatedNumberText(
@@ -1683,10 +1701,13 @@ internal fun DashboardDetailScreen(
                                 style = MaterialTheme.typography.displaySmall,
                                 fontWeight = FontWeight.Bold,
                             )
-                            weather.dewPointC?.let { dewPoint ->
-                                DetailValueRow("露点", temperatureUnit.format(dewPoint, decimal = true))
-                            }
-                            Text("相对湿度表示当前空气距离饱和状态的百分比。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            DetailDivider()
+                            DetailValueRow("露点", weather.dewPointC?.let { temperatureUnit.format(it, decimal = true) } ?: "暂无数据")
+                            Text(
+                                text = "露点是空气冷却到水汽开始凝结的温度。它越接近当前气温，汗液越难蒸发，体感也越闷潮。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                         DashboardDetail.Pressure -> {
                             AnimatedNumberText(
@@ -1695,7 +1716,6 @@ internal fun DashboardDetailScreen(
                                 style = MaterialTheme.typography.displaySmall,
                                 fontWeight = FontWeight.Bold,
                             )
-                            Text("气压值由可用天气源统一换算为百帕后加权融合。", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         DashboardDetail.Astronomy -> {
                             DetailValueRow("日出", snapshot.astronomy.sunrise ?: "--:--")
@@ -1746,13 +1766,203 @@ internal fun detailIntroduction(detail: DashboardDetail): String = when (detail)
     DashboardDetail.Wind -> "风况由风速和风向共同描述；风向表示风吹来的方向，阵风可能高于平均风速。"
     DashboardDetail.AirQuality -> "空气质量指数综合反映主要污染物水平，数值越高，户外暴露风险通常越大。"
     DashboardDetail.Ultraviolet -> "紫外线指数衡量日晒强度，等级升高时应缩短直晒时间并加强遮挡。"
-    DashboardDetail.Humidity -> "相对湿度表示空气接近饱和的程度；露点越接近气温，体感通常越潮湿。"
+    DashboardDetail.Humidity -> "相对湿度表示空气接近饱和的程度；露点是水汽开始凝结的温度，越接近气温越闷潮，低于气温很多则更干爽。"
     DashboardDetail.Pressure -> "这里显示换算到海平面的气压；约 1013.25 hPa 通常视为标准海平面气压。"
     DashboardDetail.Astronomy -> "日月升落时间按当前城市位置与日期展示；月相描述月面受光部分的变化。"
     DashboardDetail.Sources -> "天气源状态列出本次融合中实际返回数据的来源及其主要观测值。"
     DashboardDetail.Fusion -> "多源融合会按地区、指标和来源特性分配权重，并标记明显的数据差异。"
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun HourlyDetailOverview(
+    hour: HourlyForecast,
+    nearbyHours: List<HourlyForecast>,
+    isNight: Boolean,
+    formatTemperature: (Double, Boolean) -> String,
+    convertTemperature: (Double) -> Double,
+) {
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val secondaryColor = MaterialTheme.colorScheme.secondary
+    val panelColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f)
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            WeatherMiniIcon(hour.condition, large = true, isNight = isNight)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = formatTemperature(hour.temperatureC, false),
+                    style = MaterialTheme.typography.displaySmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "${formatForecastTime(hour.timeMillis)} · ${hour.condition.label}",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            HourlyDetailPill(Icons.Filled.Umbrella, "降雨", hour.rainProbability?.let { "${it.roundToInt()}%" } ?: "--")
+            HourlyDetailPill(Icons.Filled.Air, "风速", hour.windKph?.let { "${oneDecimal(it)} km/h" } ?: "--")
+            HourlyDetailPill(Icons.Filled.Navigation, "风向", hour.windDirection?.let { "${it.roundToInt()}°" } ?: "--")
+            HourlyDetailPill(Icons.Filled.Info, "AQI", hour.aqi?.toString() ?: "--")
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(138.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(panelColor)
+                .padding(12.dp),
+        ) {
+            HourlyTrendChart(
+                modifier = Modifier.fillMaxSize(),
+                hours = nearbyHours,
+                selectedTimeMillis = hour.timeMillis,
+                convertTemperature = convertTemperature,
+                primaryColor = primaryColor,
+                secondaryColor = secondaryColor,
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("温度趋势", style = MaterialTheme.typography.labelMedium, color = primaryColor, fontWeight = FontWeight.SemiBold)
+            Text("降雨柱", style = MaterialTheme.typography.labelMedium, color = secondaryColor, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun HourlyDetailPill(icon: ImageVector, label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f))
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(4.dp))
+        Text(value, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun HourlyTrendChart(
+    modifier: Modifier,
+    hours: List<HourlyForecast>,
+    selectedTimeMillis: Long,
+    convertTemperature: (Double) -> Double,
+    primaryColor: Color,
+    secondaryColor: Color,
+) {
+    Canvas(modifier = modifier) {
+        if (hours.isEmpty()) return@Canvas
+        val topPadding = 12.dp.toPx()
+        val bottomPadding = 24.dp.toPx()
+        val chartHeight = (size.height - topPadding - bottomPadding).coerceAtLeast(1f)
+        val tempValues = hours.map { convertTemperature(it.temperatureC).toFloat() }
+        val minTemp = tempValues.minOrNull() ?: 0f
+        val maxTemp = tempValues.maxOrNull() ?: minTemp
+        val tempRange = (maxTemp - minTemp).takeIf { it > 0.01f } ?: 1f
+        val stepX = if (hours.size == 1) 0f else size.width / (hours.size - 1)
+        repeat(4) { index ->
+            val y = topPadding + chartHeight * index / 3f
+            drawLine(
+                color = primaryColor.copy(alpha = 0.12f),
+                start = Offset(0f, y),
+                end = Offset(size.width, y),
+                strokeWidth = 1.dp.toPx(),
+            )
+        }
+        hours.forEachIndexed { index, item ->
+            val rain = ((item.rainProbability ?: 0.0).coerceIn(0.0, 100.0) / 100.0).toFloat()
+            val barHeight = chartHeight * 0.36f * rain
+            val x = if (hours.size == 1) size.width / 2f else index * stepX
+            drawRoundRect(
+                color = secondaryColor.copy(alpha = 0.32f + rain * 0.38f),
+                topLeft = Offset(x - 5.dp.toPx(), size.height - bottomPadding - barHeight),
+                size = Size(10.dp.toPx(), barHeight.coerceAtLeast(2.dp.toPx())),
+                cornerRadius = CornerRadius(5.dp.toPx(), 5.dp.toPx()),
+            )
+        }
+        var previous: Offset? = null
+        hours.forEachIndexed { index, item ->
+            val x = if (hours.size == 1) size.width / 2f else index * stepX
+            val value = convertTemperature(item.temperatureC).toFloat()
+            val y = topPadding + (maxTemp - value) / tempRange * chartHeight
+            val point = Offset(x, y)
+            previous?.let { start ->
+                drawLine(primaryColor.copy(alpha = 0.9f), start, point, strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
+            }
+            val selected = item.timeMillis == selectedTimeMillis
+            drawCircle(
+                color = if (selected) primaryColor else primaryColor.copy(alpha = 0.68f),
+                radius = if (selected) 5.5.dp.toPx() else 3.5.dp.toPx(),
+                center = point,
+            )
+            if (selected) {
+                drawLine(
+                    color = primaryColor.copy(alpha = 0.22f),
+                    start = Offset(x, 0f),
+                    end = Offset(x, size.height),
+                    strokeWidth = 1.dp.toPx(),
+                )
+            }
+            previous = point
+        }
+    }
+}
+
+private fun hourlyDetailWindow(hours: List<HourlyForecast>, selectedTimeMillis: Long): List<HourlyForecast> {
+    if (hours.isEmpty()) return emptyList()
+    val selectedIndex = hours.indexOfFirst { it.timeMillis == selectedTimeMillis }.let { if (it >= 0) it else 0 }
+    val rawStart = (selectedIndex - 3).coerceAtLeast(0)
+    val end = (rawStart + 7).coerceAtMost(hours.size)
+    val start = (end - 7).coerceAtLeast(0)
+    return hours.subList(start, end)
+}
+
+private fun adviceReason(
+    advice: PersonalizedAdvice,
+    weather: FusedWeather,
+    profile: UserProfile,
+    formatTemperature: (Double, Boolean) -> String,
+): String {
+    val signals = mutableListOf(
+        weather.condition.label,
+        "气温 ${formatTemperature(weather.temperatureC, false)}",
+        "体感 ${formatTemperature(weather.feelsLikeC, false)}",
+        "降雨 ${weather.rainProbability.roundToInt()}%",
+        "风 ${oneDecimal(weather.windKph)} km/h",
+        "AQI ${weather.aqi}",
+    )
+    weather.dewPointC?.let { signals += "露点 ${formatTemperature(it, true)}" }
+    val level = when (advice.level) {
+        AdviceLevel.Info -> "普通提醒"
+        AdviceLevel.Caution -> "需要留意"
+        AdviceLevel.Warning -> "优先处理"
+    }
+    val focus = when (advice.title) {
+        "穿衣" -> "重点看体感温度和风，避免只按气温判断冷暖。"
+        "通勤" -> "重点看降雨、风速和通勤方式，方便提前调整路线或装备。"
+        "日程安排" -> "重点看职业场景和高影响天气，帮助安排户外或固定时段活动。"
+        "空气质量" -> "重点看 AQI 和敏感场景，空气差时减少长时间户外暴露。"
+        "防晒" -> "重点看紫外线强度和日照条件，外出时间越长越值得提前准备。"
+        "降雨提醒" -> "重点看降雨概率和未来一小时雨量，决定雨具和出门节奏。"
+        "过敏原" -> "重点看花粉、孢子等敏感因素，适合提前准备口罩或药物。"
+        else -> "重点看当前天气风险和你的日常使用场景。"
+    }
+    return "参考：${signals.joinToString(" · ")}。${profile.occupation.label} · ${profile.commuteMode.label}，$level。$focus"
+}
 @Composable
 internal fun DetailDivider() {
     HorizontalDivider(

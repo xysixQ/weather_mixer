@@ -1,8 +1,9 @@
-﻿package com.weathermixer.sixq
+package com.weathermixer.sixq
 
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.ImageDecoder
 import android.graphics.Paint as AndroidPaint
@@ -15,6 +16,7 @@ import android.hardware.SensorManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.net.Uri
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -1491,6 +1493,11 @@ internal fun SettingsToggleItem(
 
 @Composable
 internal fun AboutScreen(modifier: Modifier = Modifier, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var updateChecking by remember { mutableStateOf(false) }
+    var updateMessage by remember { mutableStateOf<String?>(null) }
+    var updateReleaseUrl by remember { mutableStateOf<String?>(null) }
     val sdkItems = remember {
         listOf(
             SdkInfo(
@@ -1504,7 +1511,7 @@ internal fun AboutScreen(modifier: Modifier = Modifier, onBack: () -> Unit) {
                 info = "统一负责 HTTP 请求、超时和响应读取。",
             ),
             SdkInfo(
-                name = "小米天气服务",
+                name = "彩云天气服务",
                 usage = "国内城市识别、实况天气和预报数据",
                 info = "国内地区优先展示，后续再与其他源融合。",
             ),
@@ -1555,13 +1562,82 @@ internal fun AboutScreen(modifier: Modifier = Modifier, onBack: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Icon(Icons.Filled.WbSunny, contentDescription = null, modifier = Modifier.size(42.dp), tint = MaterialTheme.colorScheme.primary)
-                    Text("天气融合助手", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("M-Weather", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Text("版本 ${BuildConfig.VERSION_NAME}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("作者 xysixQ", style = MaterialTheme.typography.bodyMedium)
                     HorizontalDivider()
                     Text("预报仅供生活参考。遇到灾害性天气，请以当地气象部门发布的信息为准。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+        }
+        item {
+            SettingsMenuItem(
+                title = "GitHub 仓库",
+                subtitle = "github.com/xysixQ/weather_mixer",
+                icon = Icons.Filled.Public,
+                onClick = { context.openExternalUrl(WeatherMixerRepositoryUrl) },
+            )
+        }
+        item {
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
+                ),
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("检查更新", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("当前版本 ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Button(
+                            enabled = !updateChecking,
+                            onClick = {
+                                updateChecking = true
+                                updateMessage = "正在检查 GitHub Releases..."
+                                updateReleaseUrl = null
+                                scope.launch {
+                                    val result = runCatching { checkWeatherMixerReleaseUpdate(BuildConfig.VERSION_NAME) }
+                                        .getOrElse { error -> ReleaseCheckResult("检查失败：${error.message ?: "网络请求异常"}") }
+                                    updateMessage = result.message
+                                    updateReleaseUrl = result.releaseUrl
+                                    updateChecking = false
+                                }
+                            },
+                        ) {
+                            if (updateChecking) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            } else {
+                                Text("检查")
+                            }
+                        }
+                    }
+                    updateMessage?.let { message ->
+                        Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    updateReleaseUrl?.let { url ->
+                        TextButton(onClick = { context.openExternalUrl(url) }) {
+                            Text("打开 Release")
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            SettingsMenuItem(
+                title = "反馈渠道",
+                subtitle = "通过 GitHub Issues 提交反馈",
+                icon = Icons.Filled.Info,
+                onClick = { context.openExternalUrl(WeatherMixerIssuesUrl) },
+            )
         }
         item {
             Card(
@@ -1582,8 +1658,123 @@ internal fun AboutScreen(modifier: Modifier = Modifier, onBack: () -> Unit) {
                 }
             }
         }
+        item {
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
+                ),
+            ) {
+                Text(
+                    text = buildAnnotatedString {
+                        append("随 ")
+                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)) {
+                            append("AviumUI")
+                        }
+                        append(" For Waffle 一同开发")
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { context.openExternalUrl(AviumUiOfficialUrl) }
+                        .padding(18.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
+
+private const val WeatherMixerRepositoryUrl = "https://github.com/xysixQ/weather_mixer"
+private const val WeatherMixerIssuesUrl = "https://github.com/xysixQ/weather_mixer/issues"
+private const val WeatherMixerReleasesApiUrl = "https://api.github.com/repos/xysixQ/weather_mixer/releases?per_page=10"
+private const val AviumUiOfficialUrl = "https://aviumui.org"
+
+private val GitHubReleaseHttpClient = OkHttpClient.Builder()
+    .callTimeout(12, TimeUnit.SECONDS)
+    .build()
+
+private fun Context.openExternalUrl(url: String) {
+    runCatching {
+        startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+}
+
+private data class ReleaseCheckResult(
+    val message: String,
+    val releaseUrl: String? = null,
+)
+
+private data class GitHubReleaseInfo(
+    val tagName: String,
+    val name: String,
+    val htmlUrl: String,
+    val publishedAt: String,
+    val prerelease: Boolean,
+)
+
+private suspend fun checkWeatherMixerReleaseUpdate(currentVersion: String): ReleaseCheckResult = withContext(Dispatchers.IO) {
+    val request = Request.Builder()
+        .url(WeatherMixerReleasesApiUrl)
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "M-Weather/${BuildConfig.VERSION_NAME}")
+        .build()
+    GitHubReleaseHttpClient.newCall(request).execute().use { response ->
+        val body = response.body.string()
+        when (response.code) {
+            404 -> return@withContext ReleaseCheckResult("暂时无法读取 Release。私有仓库需要 GitHub Token，或将 Release 公开后再检查。")
+            403 -> return@withContext ReleaseCheckResult("GitHub API 暂时拒绝请求，可能是频率限制。稍后再试。")
+        }
+        if (!response.isSuccessful) {
+            return@withContext ReleaseCheckResult("检查失败：GitHub 返回 ${response.code} ${response.message}")
+        }
+        val releases = JSONArray(body)
+        val parsed = (0 until releases.length()).mapNotNull { index ->
+            val item = releases.optJSONObject(index) ?: return@mapNotNull null
+            if (item.optBoolean("draft", false)) return@mapNotNull null
+            GitHubReleaseInfo(
+                tagName = item.optString("tag_name"),
+                name = item.optString("name"),
+                htmlUrl = item.optString("html_url"),
+                publishedAt = item.optString("published_at"),
+                prerelease = item.optBoolean("prerelease", false),
+            )
+        }
+        val latest = parsed.firstOrNull { !it.prerelease } ?: parsed.firstOrNull()
+            ?: return@withContext ReleaseCheckResult("仓库暂时没有可用 Release。")
+        val latestLabel = latest.name.ifBlank { latest.tagName }
+        val publishedDate = latest.publishedAt.take(10).takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+        val compare = compareVersionTags(latest.tagName, currentVersion)
+        val message = when {
+            compare > 0 -> "发现新版本：$latestLabel$publishedDate"
+            compare == 0 -> "当前已是最新版本：$latestLabel$publishedDate"
+            else -> "当前版本高于最新 Release：$latestLabel$publishedDate"
+        }
+        ReleaseCheckResult(message, latest.htmlUrl.takeIf { it.isNotBlank() })
+    }
+}
+
+private fun compareVersionTags(left: String, right: String): Int {
+    val leftParts = versionNumberParts(left)
+    val rightParts = versionNumberParts(right)
+    if (leftParts.isEmpty() || rightParts.isEmpty()) return left.compareTo(right, ignoreCase = true)
+    val size = max(leftParts.size, rightParts.size)
+    for (index in 0 until size) {
+        val l = leftParts.getOrElse(index) { 0 }
+        val r = rightParts.getOrElse(index) { 0 }
+        if (l != r) return l.compareTo(r)
+    }
+    return 0
+}
+
+private fun versionNumberParts(value: String): List<Int> = Regex("\\d+")
+    .findAll(value)
+    .mapNotNull { it.value.toIntOrNull() }
+    .toList()
 
 private data class SdkInfo(
     val name: String,

@@ -1,4 +1,4 @@
-﻿package com.weathermixer.sixq
+package com.weathermixer.sixq
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -639,9 +639,11 @@ internal class WeatherRepository {
             return LocationLookupResult(null, "百度 IP 定位 endpoint 为空，请恢复默认或手动填写。")
         }
 
+        val baiduAk = encodeUrlParameter(config.apiKey.trim())
         val requestUrl = config.endpoint
-            .replace("{key}", config.apiKey.trim())
-            .replace("{ak}", config.apiKey.trim())
+            .replace("{key}", baiduAk)
+            .replace("{ak}", baiduAk)
+            .replace("{baiduAk}", baiduAk)
 
         val body = withContext(Dispatchers.IO) {
             runCatching {
@@ -1152,7 +1154,7 @@ internal class WeatherRepository {
             rain >= 60 -> WeatherAlert(AlertLevel.Rain, "短时降雨", "未来一小时有明显降水概率。")
             else -> WeatherAlert(AlertLevel.None, "无显著预警", "未发现高影响天气。")
         }
-        val xiaomi = liveXiaomi ?: WeatherReading(WeatherSource(SourceId.XiaomiWeather, "小米天气", "国内 · 优先预报源"), baseTemp - 0.3, feelsLike, rain, rainNextHour, wind, aqi, pm25, uvIndex, humidity, 3, if (coastalSevere) 4 else 2, condition, alert)
+        val xiaomi = liveXiaomi ?: WeatherReading(WeatherSource(SourceId.XiaomiWeather, "彩云天气", "国内 · 优先预报源"), baseTemp - 0.3, feelsLike, rain, rainNextHour, wind, aqi, pm25, uvIndex, humidity, 3, if (coastalSevere) 4 else 2, condition, alert)
 
         return (listOf(
             xiaomi,

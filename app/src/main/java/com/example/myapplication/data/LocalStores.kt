@@ -1,4 +1,4 @@
-﻿package com.weathermixer.sixq
+package com.weathermixer.sixq
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -341,7 +341,7 @@ internal object HapticFeedbackStore {
 
     fun load(context: Context): Boolean = context
         .getSharedPreferences(PrefName, Context.MODE_PRIVATE)
-        .getBoolean(EnabledKey, false)
+        .getBoolean(EnabledKey, true)
 
     fun save(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PrefName, Context.MODE_PRIVATE)
@@ -504,11 +504,11 @@ internal object ApiConfigStore {
             } == true
         val recoverBuiltInNoKeyWeather = schemaVersion < 8 &&
             savedFailureStatus?.let { status ->
-                status.contains("小米天气已停用") || status.contains("MSN 天气已停用")
+                status.contains("彩云天气已停用") || status.contains("\u5c0f\u7c73\u5929\u6c14已停用") || status.contains("MSN 天气已停用")
             } == true
         val clearBuiltInWeatherEndpointFailure = schemaVersion < 9 &&
             savedFailureStatus?.let { status ->
-                (status.contains("小米天气暂不可用") && status.contains("400")) ||
+                ((status.contains("彩云天气暂不可用") || status.contains("\u5c0f\u7c73\u5929\u6c14暂不可用")) && status.contains("400")) ||
                     (status.contains("MSN 天气暂不可用") && status.contains("401"))
             } == true
         val configs = ApiConfigDefaults.defaultConfigs().map { default ->
@@ -533,20 +533,22 @@ internal object ApiConfigStore {
                     savedEndpoint in setOf(legacyMsnCredentialEndpoint, legacyMsnNoCredentialEndpoint) -> default.endpoint
                 else -> savedEndpoint
             }
-            val savedHost = prefs.getString(prefix + ApiHostSuffix, default.apiHost).orEmpty()
-            val migratedHost = savedHost.ifBlank {
+            val savedHost = prefs.getString(prefix + ApiHostSuffix, null)
+            val migratedHost = savedHost.orEmpty().ifBlank {
                 endpoint.substringAfter("://", "")
                     .substringBefore('/')
                     .takeIf { it.endsWith(".qweatherapi.com", ignoreCase = true) }
-                    .orEmpty()
+                    ?: default.apiHost
+            }
+            val savedKey = prefs.getString(prefix + KeySuffix, null)
+            val apiKey = when {
+                schemaVersion < CurrentSchemaVersion && default.sourceId in setOf(SourceId.XiaomiWeather, SourceId.MsnWeather) -> default.apiKey
+                savedKey.isNullOrBlank() && default.apiKey.isNotBlank() -> default.apiKey
+                else -> savedKey ?: default.apiKey
             }
             default.copy(
                 endpoint = endpoint,
-                apiKey = if (schemaVersion < CurrentSchemaVersion && default.sourceId in setOf(SourceId.XiaomiWeather, SourceId.MsnWeather)) {
-                    default.apiKey
-                } else {
-                    prefs.getString(prefix + KeySuffix, default.apiKey) ?: default.apiKey
-                },
+                apiKey = apiKey,
                 userAgent = prefs.getString(prefix + UserAgentSuffix, default.userAgent) ?: default.userAgent,
                 enabled = when {
                     schemaVersion < 5 && default.sourceId == SourceId.Meteostat -> true

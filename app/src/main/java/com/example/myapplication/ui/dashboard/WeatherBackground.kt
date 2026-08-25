@@ -1137,6 +1137,10 @@ internal fun WeatherHero(
         reminderCondition = reminderCondition,
         profile = profile,
     )
+
+    val conditionSummaryText = today?.let {
+        "${fused.condition.label} · 白天 ${temperatureUnit.format(it.highC)} · 夜间 ${temperatureUnit.format(it.lowC)}"
+    } ?: "${fused.condition.label} · 体感 ${temperatureUnit.format(fused.feelsLikeC)}"
     val supportingFadeProgress = ((collapseProgress - 0.24f) / 0.58f).coerceIn(0f, 1f)
     val supportingAlpha = 1f - supportingFadeProgress
     Column(
@@ -1194,9 +1198,7 @@ internal fun WeatherHero(
             },
         ) {
             Text(
-                text = today?.let {
-                    "白天 ${temperatureUnit.format(it.highC)} · 夜间 ${temperatureUnit.format(it.lowC)}"
-                } ?: "体感 ${temperatureUnit.format(fused.feelsLikeC)}",
+                text = conditionSummaryText,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = foregroundColor.copy(alpha = 0.92f),
@@ -1273,6 +1275,8 @@ internal fun weatherGreetingFor(
         WeatherCondition.FreezingRain -> "现在正在下冻雨"
     }
     val seed = dayOfYear * 7 + hour + reminderCondition.ordinal * 3 + profile.occupation.ordinal
+    val sunPromptAllowed = !greetingIsNight && condition == WeatherCondition.Sunny && reminderCondition == WeatherCondition.Sunny
+    val mildPromptAllowed = condition == WeatherCondition.Cloudy || reminderCondition == WeatherCondition.Cloudy
     fun choose(options: List<String>): String = options[Math.floorMod(seed, options.size)]
     val prompt = when {
         hour in 0..4 || hour == 23 -> choose(
@@ -1297,53 +1301,53 @@ internal fun weatherGreetingFor(
                 )
             }
         )
-        hour in 10..11 && reminderCondition == WeatherCondition.Sunny -> choose(
-            listOf("出门逛逛？", "要不要出去晒晒太阳？", "天气正好，走两步吧~")
+        hour in 10..11 && sunPromptAllowed -> choose(
+            listOf("出门逛逛？", "要不要出去晒晒太阳？", "天气正好，走两步吧！")
         )
-        hour in 10..11 && reminderCondition == WeatherCondition.Cloudy -> choose(
-            listOf("出门逛逛？", "趁天气温和出去走走？", "云多一点，也很适合散步呀~")
+        hour in 10..11 && mildPromptAllowed -> choose(
+            listOf("出门逛逛？", "趁天气温和出去走走？", "云多一点，也很适合散步呀！")
         )
         hour in 11..13 -> choose(
-            listOf("午饭想吃点什么？", "到饭点啦，吃点喜欢的吧~", "中午也要好好补充能量呀~")
+            listOf("午饭想吃点什么？", "到饭点啦，吃点喜欢的吧~", "中午也要好好补充能量呀！")
         )
-        hour in 14..17 && reminderCondition == WeatherCondition.Sunny -> choose(
-            listOf("忙一会儿，也记得看看窗外~", "要不要出去走走？", "下午的阳光还不错哦~")
+        hour in 14..17 && sunPromptAllowed -> choose(
+            listOf("忙一会儿，也记得看看窗外~", "要不要出去走走？", "下午的阳光还不错哦！")
         )
-        hour in 14..17 && reminderCondition == WeatherCondition.Cloudy -> choose(
-            listOf("忙累了就起来活动一下吧~", "出去走走？今天不会太晒~", "给自己留几分钟透透气吧~")
+        hour in 14..17 && mildPromptAllowed -> choose(
+            listOf("忙累了就起来活动一下吧~", "出去走走？今天不会太晒~", "给自己留几分钟透透气吧！")
         )
         hour in 18..21 && isRegularWorkday -> choose(
             when (profile.occupation) {
                 Occupation.Student -> listOf(
                     "学习一天了，犒劳一下自己吧！",
-                    "今天的学习告一段落了吗？休息一下吧~",
-                    "学习辛苦啦，晚一点也别忘了放松~",
+                    "今天的学习告一段落了吗？休息一下吧！",
+                    "学习辛苦啦，晚一点也别忘了放松！",
                 )
                 Occupation.Office, Occupation.Outdoor -> listOf(
                     "工作一天了，犒劳一下自己吧！",
-                    "今天忙完了吗？下班后放松一下吧~",
-                    "工作辛苦啦，给今晚留点自己的时间~",
+                    "今天忙完了吗？下班后放松一下吧！",
+                    "工作辛苦啦，给今晚留点自己的时间！",
                 )
                 Occupation.Homebody -> listOf(
                     "今天也认真生活了一天，犒劳一下自己吧！",
-                    "晚上啦，给自己安排一点喜欢的事吧~",
-                    "忙了一天，舒服地歇一会儿吧~",
+                    "晚上啦，给自己安排一点喜欢的事吧！",
+                    "忙了一天，舒服地歇一会儿吧！",
                 )
                 Occupation.Other -> listOf(
                     "忙了一天了，犒劳一下自己吧！",
-                    "今天辛苦啦，晚上放松一下吧~",
-                    "给今晚留一点轻松的时间吧~",
+                    "今天辛苦啦，晚上放松一下吧！",
+                    "给今晚留一点轻松的时间吧！",
                 )
             }
         )
         reminderCondition.isRainLike -> choose(
-            listOf("外出记得带伞呀~", "路面可能有点滑，慢一点哦~", "听听雨声，也别忘了照顾好自己~")
+            listOf("外出记得带伞呀~", "路面可能有点滑，慢一点哦~", "听听雨声，也别忘了照顾好自己！")
         )
         hour in 18..22 -> choose(
-            listOf("晚饭吃好了吗？", "今天过得怎么样？", "晚上也要留一点时间给自己~")
+            listOf("晚饭吃好了吗？", "今天过得怎么样？", "晚上也要留一点时间给自己！")
         )
         else -> choose(
-            listOf("忙累了就休息一下吧~", "今天想做点什么？", "记得偶尔抬头看看天气呀~")
+            listOf("忙累了就休息一下吧！", "今天想做点什么？", "记得偶尔抬头看看天气哟~")
         )
     }
     return WeatherGreeting(salutation, weatherLine, prompt)

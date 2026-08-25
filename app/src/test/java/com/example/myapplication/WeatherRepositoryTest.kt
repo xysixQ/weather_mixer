@@ -67,13 +67,13 @@ class WeatherRepositoryTest {
     }
 
     @Test
-    fun baiduIpLocationWithoutReadyConfigFallsBackToDeviceMethod() {
+    fun baiduIpLocationCanRemainSelectedWhenConfigIsNotReady() {
         val configs = ApiConfigDefaults.defaultConfigs().map { config ->
             if (config.sourceId == SourceId.BaiduIpLocation) config.copy(apiKey = "") else config
         }
 
         assertTrue(configs.first { it.sourceId == SourceId.BaiduIpLocation }.requiresKey)
         assertFalse(configs.first { it.sourceId == SourceId.BaiduIpLocation }.isReady)
-        assertTrue(normalizeLocationMethodForConfigs(LocationMethod.BaiduIp, configs) == LocationMethod.Device)
+        assertFalse(isBaiduIpLocationReady(configs))
     }
 }

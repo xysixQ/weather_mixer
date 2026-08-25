@@ -1,4 +1,4 @@
-﻿package com.weathermixer.sixq
+package com.weathermixer.sixq
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -984,7 +984,7 @@ internal fun parseXiaomiWeather(body: String): WeatherReading? {
     }
 
     return WeatherReading(
-        source = WeatherSource(SourceId.XiaomiWeather, "小米天气", "国内 · 实况与15日预报"),
+        source = WeatherSource(SourceId.XiaomiWeather, "彩云天气", "国内 · 实况与15日预报"),
         temperatureC = temperature,
         feelsLikeC = feelsLike,
         rainProbability = rainProbability,
@@ -1247,13 +1247,13 @@ internal fun parseXiaomiAlert(
         return WeatherAlert(
             level = level,
             title = title,
-            detail = detail.ifBlank { "小米天气返回预警信息，请关注当地官方发布。" },
+            detail = detail.ifBlank { "彩云天气返回预警信息，请关注当地官方发布。" },
         )
     }
     return when {
-        condition?.isSevereWeather == true -> WeatherAlert(AlertLevel.Severe, condition.label, "小米天气实况显示存在高影响天气。")
-        rainNextHour != null && rainNextHour >= 6.0 -> WeatherAlert(AlertLevel.Rain, "短时降雨", "小米天气显示未来一小时降雨偏强。")
-        rainProbability != null && rainProbability >= 65.0 -> WeatherAlert(AlertLevel.Rain, "降雨概率较高", "小米天气显示降雨概率较高。")
+        condition?.isSevereWeather == true -> WeatherAlert(AlertLevel.Severe, condition.label, "彩云天气实况显示存在高影响天气。")
+        rainNextHour != null && rainNextHour >= 6.0 -> WeatherAlert(AlertLevel.Rain, "短时降雨", "彩云天气显示未来一小时降雨偏强。")
+        rainProbability != null && rainProbability >= 65.0 -> WeatherAlert(AlertLevel.Rain, "降雨概率较高", "彩云天气显示降雨概率较高。")
         else -> null
     }
 }

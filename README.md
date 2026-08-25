@@ -1,10 +1,10 @@
-# Weather Mixer
+# M-Weather
 
-Weather Mixer 是一款以多天气源融合为核心的 Android 天气应用。它使用 Jetpack Compose 和 Material 3 构建，重点放在快速展示天气实况、可配置首页卡片、动态天气背景、个性化建议，以及国内外不同天气源的组合兜底。
+M-Weather 是一款以多天气源融合为核心的 Android 天气应用。它使用 Jetpack Compose 和 Material 3 构建，重点放在快速展示天气实况、可配置首页卡片、动态天气背景、个性化建议，以及国内外不同天气源的组合兜底。
 
 ## 功能概览
 
-- 多天气源融合：国内优先小米天气，国外支持 Open-Meteo、MSN、met.no、NWS 等源参与补充。
+- 多天气源融合：国内优先彩云天气，国外支持 Open-Meteo、MSN、met.no、NWS 等源参与补充。
 - 首页模块化：大温度、每日预报、逐小时预报、降雨、风速、空气质量、紫外线、湿度、气压等模块可调整顺序。
 - 天气详情页：支持每日和逐小时预报详情、左右滑动切换日期/小时、来源信息和融合说明。
 - 动态体验：天气背景、下拉刷新、主题扩散动画、卡片拖动、可选震动反馈。
@@ -27,7 +27,7 @@ Weather Mixer 是一款以多天气源融合为核心的 Android 天气应用。
 常用字段示例：
 
 ```properties
-baiduIpLocationApiKey=
+baiduIpLocationApiKey=  # 兼容 baiduMapApiKey / baiduAk / baiduApiKey
 amapApiKey=
 qWeatherApiKey=
 qWeatherApiHost=
@@ -39,7 +39,7 @@ aiAdviceApiKey=
 aiAdviceEndpoint=
 ```
 
-小米天气和 MSN 天气使用内置默认 endpoint 参数，不需要用户在本地配置或设置页填写 Key；设置页会隐藏这些内置参数。
+彩云天气和 MSN 天气使用内置默认 endpoint 参数，不需要用户在本地配置或设置页填写 Key；设置页会隐藏这些内置参数。
 
 ## 构建与验证
 

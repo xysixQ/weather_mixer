@@ -1,4 +1,4 @@
-﻿import java.util.Properties
+import java.util.Properties
 
 val localProperties = Properties().apply {
     val localFile = rootProject.file("local.properties")
@@ -9,7 +9,12 @@ val localProperties = Properties().apply {
 
 fun String.toBuildConfigString(): String = "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
-fun localConfig(name: String): String = localProperties.getProperty(name, "")
+fun localConfig(name: String, vararg aliases: String): String {
+    val names = listOf(name) + aliases
+    return names.firstNotNullOfOrNull { key ->
+        localProperties.getProperty(key)?.takeIf(String::isNotBlank)
+    }.orEmpty()
+}
 
 plugins {
     alias(libs.plugins.android.application)
@@ -26,8 +31,8 @@ android {
         applicationId = "com.weathermixer.sixq"
         minSdk = 24
         targetSdk = 37
-        versionCode = 89
-        versionName = "1.2.32"
+        versionCode = 116
+        versionName = "1.3.56"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField(
@@ -38,7 +43,7 @@ android {
         buildConfigField(
             "String",
             "BAIDU_IP_LOCATION_API_KEY",
-            localConfig("baiduIpLocationApiKey").toBuildConfigString()
+            localConfig("baiduIpLocationApiKey", "baiduMapApiKey", "baiduAk", "baiduApiKey").toBuildConfigString()
         )
         buildConfigField(
             "String",

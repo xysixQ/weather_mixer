@@ -4,14 +4,12 @@
 sdk.dir=
 
 aiAdviceApiKey=
+# 百度 IP 定位 AK。兼容旧名：baiduMapApiKey / baiduAk / baiduApiKey
 baiduIpLocationApiKey=
-xiaomiWeatherAppKey=
-xiaomiWeatherSign=
 amapApiKey=
 qWeatherApiKey=
 qWeatherApiHost=
 seniverseApiKey=
-msnWeatherApiKey=
 openWeatherApiKey=
 visualCrossingApiKey=
 meteostatRapidApiKey=

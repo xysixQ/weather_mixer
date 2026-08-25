@@ -262,7 +262,7 @@ internal object LanguageOverrideStore {
         }
         return JSONObject()
             .put("version", 1)
-            .put("note", "导入后请重启 Weather Mixer。")
+            .put("note", "导入后请重启 M-Weather。")
             .put("strings", values)
             .toString(2)
     }
