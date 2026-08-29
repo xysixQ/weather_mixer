@@ -15,7 +15,7 @@ M-Weather 是一款以多天气源融合为核心的 Android 天气应用。重�
 
 1.拉取源码到本地
 
-2.在local.properties.example中配置自己的API-key。
+2.在local.properties.example中配置自己的sdk位置和API-key。
 常用字段示例：
 ```properties
 sdk.dir=（android-sdk的位置，示例：D\:\\Android\\android-sdk）
