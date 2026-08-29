@@ -4,7 +4,6 @@
 sdk.dir=
 
 aiAdviceApiKey=
-# 百度 IP 定位 AK。兼容旧名：baiduMapApiKey / baiduAk / baiduApiKey
 baiduIpLocationApiKey=
 amapApiKey=
 qWeatherApiKey=
