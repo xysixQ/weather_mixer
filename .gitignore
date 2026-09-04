@@ -1,4 +1,4 @@
-﻿*.iml
+*.iml
 .gradle
 /.android/
 /.codex-preview/
@@ -24,5 +24,5 @@ local.properties
 .cxx
 GitCommitAssistant.exe
 M-Weather-1.3.56-release-aligned.apk
-/tools
+tools/
 weather
